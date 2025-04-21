@@ -12,6 +12,25 @@ pixi install
 # Add a package to the environment
 pixi add --pypi "bionumpy==1.0.13"
 
+pixi add cutadapt==5.0
+
+pixi add chopper==0.9.2
+
+pixi add seqkit==2.10.0
+
+pixi add polars=1.26.0
+
+pixi add "slack-sdk=3.35.0"
+
+pixi add --pypi pyarrow
+
+pixi add r-ggpubr
+
+# Add a channel to the environment
+pixi project channel add bioconda
+
+pixi project channel add bioconda conda-forge
+
 # Set the source and destination directories
 SOURCE_DIR="/home/maurice/projects/phd/oesphlora/data/origin/oac_biopsies"
 DEST_DIR="/home/maurice/projects/phd/oesphlora/fastq_files/demultiplexed"

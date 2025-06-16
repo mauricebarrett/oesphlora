@@ -2,9 +2,21 @@ library(ggplot2)
 library(ggpubr)
 library(tidyr)
 
+
+# reorder levels of the primary variable
+merged_df <- merged_df %>%
+    mutate(
+        !!primary_variable := factor(
+            .data[[primary_variable]],
+            levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+        )
+    )
+
+
 # Debug group levels
 print("Primary variable values:")
 print(levels(factor(merged_df[[primary_variable]])))
+
 
 # Create all possible pairwise comparisons without filtering
 all_groups <- levels(factor(merged_df[[primary_variable]]))
@@ -35,20 +47,19 @@ for (metric in metrics) {
       comparisons = pairwise_comparisons,
       label = "p.signif", 
       method = "wilcox.test", 
-      p.adjust.method = "BH",
+      p.adjust.method = NULL,
       step.increase = 0.1
     ) +
     theme_classic() +
-        scale_fill_manual(values = final_colors) +
-        labs(title = metric, x = NULL, y = NULL) +
-        theme(legend.position = "none") +
-        theme(
-            plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
-            axis.line.y = element_line(linetype = 1, linewidth = 0.5, colour = "black"),
-            axis.line.x = element_line(linetype = 1, linewidth = 0.5, colour = "black"),
-            axis.text.x = element_text(face = "bold", size = 12),
-            axis.text.y = element_text(face = "bold", size = 12, color = "black"),
-        )
+    labs(title = metric, x = NULL, y = NULL) +
+    theme(
+        legend.position = "none",
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        axis.line.y = element_line(linetype = 1, linewidth = 0.5, colour = "black"),
+        axis.line.x = element_line(linetype = 1, linewidth = 0.5, colour = "black"),
+        axis.text.x = element_text(face = "bold", size = 12),
+        axis.text.y = element_text(face = "bold", size = 12, color = "black")
+    )
   
   plot_list[[metric]] <- p
 }

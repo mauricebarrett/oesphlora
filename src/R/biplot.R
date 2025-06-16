@@ -1,9 +1,5 @@
-#!/usr/bin/env Rscript
-
 library(ggplot2)
-library(dplyr)
-
-
+library(ggrepel)
 
 # PERMANOVA results should be in the form "test_statistic,R_squared,p_value"
 permanova_results <- list(
@@ -14,11 +10,21 @@ permanova_results <- list(
 
 
 
+# Prepare the title with stress value and PERMANOVA results
+plot_title_names <- 
+    "Robust Aitchison PCA ordination scatter plot"
+
+#     "Trial = ", title_list[[1]],
+#     ", Amplicon type = ", title_list[[2]],
+#     ", Substrate type = ", title_list[[3]],
+#     ", Sample type = ", title_list[[4]]
+# )
+
+
 
 # Prepare the title with stress value and PERMANOVA results
 plot_title_stats <- paste0(
-    "Stress: ", round(stress_value, 6), ", ",
-    "PERMANOVA pseudo-F: ", round(permanova_results[["test statistic"]], 6), ", ",
+    "pseudo-F: ", round(permanova_results[["test statistic"]], 6), ", ",
     "R²: ", round(permanova_results[["R²"]], 6), ", ",
     "p-value: ", round(permanova_results[["p-value"]], 4)
 )
@@ -26,25 +32,25 @@ plot_title_stats <- paste0(
 
 
 
-# Add row names as a column manually for both data frames
-nmds_coordinates_df$SampleID <- rownames(nmds_coordinates_df)
-metadata$SampleID <- rownames(metadata)
-
-# Perform the join based on 'SampleID'
-nmds_data <- merge(nmds_coordinates_df, metadata, by = "SampleID")
-
-
-nmds_data[[primary_variable]] <- factor(nmds_data[[primary_variable]],
+ord_df[[primary_variable]] <- factor(ord_df[[primary_variable]],
     levels = c("Control", sort(setdiff(unique(nmds_data[[primary_variable]]), "Control")))
 )
 
-print(levels(nmds_data[[primary_variable]]))
+print(levels(ord_df[[primary_variable]]))
 
 # Define a colorblind-friendly palette (Okabe-Ito or similar)
-cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+cb_palette <- c(
+    "#E69F00",
+    "#56B4E9",
+    "#009E73",
+    "#F0E442",
+    "#0072B2",
+    "#D55E00",
+    "#CC79A7"
+)
 
-# Ensure the color vector length matches `treatments_used`
-num_treatments <- length(levels(nmds_data[[primary_variable]]))
+# Ensure the color vector length matches the number of levels in the primary variable
+num_treatments <- length(levels(ord_df[[primary_variable]]))
 
 print(num_treatments)
 
@@ -53,30 +59,36 @@ final_colors <- c("grey", cb_palette[1:(num_treatments - 1)])
 
 
 
-
 # Convert primary_variable string to a formula dynamically
-formula <- reformulate(primary_variable, response = "cbind(NMDS1, NMDS2)")
+formula <- reformulate(primary_variable, response = "cbind(PC1, PC2)")
 
 # Calculate centroids
-centroids <- aggregate(formula, data = nmds_data, mean)
+centroids <- aggregate(formula, data = ord_df, mean)
 
 # Merge data
-bc_data <- merge(nmds_data,
+rpca_data <- merge(ord_df,
     centroids,
     by = primary_variable,
     suffixes = c("", "_centroid")
 )
 
-# Create the NMDS plot
-nmds_plot <- ggplot(bc_data, aes(x = NMDS1, y = NMDS2, color = !!sym(primary_variable))) +
-    geom_point(size = 2, alpha = 0.7) +
-    geom_point(aes(x = NMDS1_centroid, y = NMDS2_centroid, color = !!sym(primary_variable)), size = 4) +
-    geom_segment(aes(x = NMDS1_centroid, y = NMDS2_centroid, xend = NMDS1, yend = NMDS2, color = !!sym(primary_variable)), size = 1) +
-    # stat_ellipse(geom = "polygon", aes(x = NMDS1, y = NMDS2, group = primary_variable, color = primary_variable, fill = primary_variable), level = 0.95, type = "norm", size = 1, alpha = 0.3) +
+
+biplot <- ggplot(data = rpca_data, aes(x = PC1, y = PC2, color = !!sym(primary_variable))) +
+    geom_point(size = 2) +
+    # geom_point(aes(x = PC1_centroid, y = PC2_centroid, color = !!sym(primary_variable)), size = 4) +
+    # geom_segment(aes(x = PC1_centroid, y = PC2_centroid, xend = PC1, yend = PC2, color = !!sym(primary_variable)), size = 1) +
     labs(
-        title = paste0("NMDS Plot", "\n", plot_title_stats),
-        x = "NMDS1",
-        y = "NMDS2"
+        title = paste0(plot_title_names, "\n", plot_title_stats),
+        x = paste0("PC1 (", round(explained_variance[[1]] * 100, 2), "%)"),
+        y = paste0("PC2 (", round(explained_variance[[2]] * 100, 2), "%)"),
+    ) +
+    geom_segment(
+        data = top_feats_taxa_df, aes(x = 0, y = 0, xend = PC1 * 1, yend = PC2 * 1),
+        arrow = arrow(length = unit(0.2, "cm")), color = "black"
+    ) +
+    geom_text_repel(
+        data = top_feats_taxa_df, aes(x = PC1 * 1, y = PC2 * 1, label = label),
+        color = "black", size = 3
     ) +
     scale_color_manual(values = final_colors) +
     scale_fill_manual(values = final_colors) +
@@ -99,7 +111,7 @@ nmds_plot <- ggplot(bc_data, aes(x = NMDS1, y = NMDS2, color = !!sym(primary_var
 temp_file <- tempfile(fileext = ".png")
 
 png(temp_file, width = 16, height = 9, units = "in", res = 300)
-print(nmds_plot)
+print(biplot)
 dev.off()
 
 temp_file

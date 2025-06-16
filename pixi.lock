@@ -319,6 +319,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/overrides-7.7.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pandas-2.2.2-py310hf9f9076_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pandas-stubs-2.2.3.250527-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pandoc-3.5-ha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pandocfilters-1.5.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pango-1.54.0-h84a9a3c_0.conda
@@ -761,6 +762,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typer-slim-0.12.5-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/typer-slim-standard-0.12.5-hd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/types-python-dateutil-2.9.0.20241003-pyhd8ed1ab_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/types-pytz-2025.2.0.20250516-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.12.2-hd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.12.2-pyha770c72_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_utils-0.1.0-pyhd8ed1ab_1.conda
@@ -5241,6 +5243,19 @@ packages:
   - pkg:pypi/pandas?source=hash-mapping
   size: 13024685
   timestamp: 1715898109537
+- conda: https://conda.anaconda.org/conda-forge/noarch/pandas-stubs-2.2.3.250527-pyhd8ed1ab_1.conda
+  sha256: f36a5bc0b4551febcf8ce87cb7814c2d0ca8ef2c8f1606c924ca3f0bc1fd27ae
+  md5: 50f3c512f3034ed6277043f36af5dcb2
+  depends:
+  - numpy >=1.26.0
+  - python >=3.10
+  - types-pytz >=2022.1.1
+  license: BSD-3-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/pandas-stubs?source=hash-mapping
+  size: 100801
+  timestamp: 1748387401885
 - conda: https://conda.anaconda.org/conda-forge/linux-64/pandoc-3.5-ha770c72_0.conda
   sha256: 56df96c2707a5ac71b2e5d3b32e38521c0bac91006d0b8948c1d347dd5c12609
   md5: 2889e6b9c666c3a564ab90cedc5832fd
@@ -7191,8 +7206,6 @@ packages:
   - r-recipes >=0.1.10
   - r-reshape2
   - r-withr >=2.0.0
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL2
   purls: []
@@ -7271,8 +7284,6 @@ packages:
   - r-rlang >=0.4.10
   - r-tzdb >=0.2.0
   - r-vctrs >=0.3.7
-  arch: x86_64
-  platform: linux
   license: MIT
   license_family: MIT
   purls: []
@@ -7355,8 +7366,6 @@ packages:
   - r-matrixstats
   - r-rcpp >=1.0.3
   - r-rcpparmadillo >=0.9.850.1.0
-  arch: x86_64
-  platform: linux
   license: GPL-3.0-only
   license_family: GPL3
   purls: []
@@ -8253,8 +8262,6 @@ packages:
   depends:
   - libgcc-ng >=12
   - r-base >=4.3,<4.4.0a0
-  arch: x86_64
-  platform: linux
   license: GPL-3.0-only
   license_family: GPL3
   purls: []
@@ -8600,8 +8607,6 @@ packages:
   - r-prodlim
   - r-rpart >=3.1_8
   - r-survival
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL3
   purls: []
@@ -8689,8 +8694,6 @@ packages:
   - libgfortran
   - libgfortran5 >=13.3.0
   - r-base >=4.3,<4.4.0a0
-  arch: x86_64
-  platform: linux
   license: Unlimited
   license_family: MIT
   purls: []
@@ -8996,8 +8999,6 @@ packages:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=13
   - r-base >=4.3,<4.4.0a0
-  arch: x86_64
-  platform: linux
   license: BSD-2-Clause
   license_family: BSD
   purls: []
@@ -9074,8 +9075,6 @@ packages:
   - r-base >=4.3,<4.4.0a0
   - r-data.table
   - r-rcpp
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL3
   purls: []
@@ -9240,8 +9239,6 @@ packages:
   - __glibc >=2.17,<3.0.a0
   - libgcc >=13
   - r-base >=4.3,<4.4.0a0
-  arch: x86_64
-  platform: linux
   license: LGPL-2.1-or-later
   license_family: LGPL
   purls: []
@@ -9411,8 +9408,6 @@ packages:
   - r-base >=4.3,<4.4.0a0
   - r-plyr
   - r-rcpp >=0.11.1
-  arch: x86_64
-  platform: linux
   license: GPL-3.0-or-later
   license_family: GPL3
   purls: []
@@ -9445,8 +9440,6 @@ packages:
   - r-lava
   - r-rcpp >=0.11.5
   - r-survival
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL2
   purls: []
@@ -9549,8 +9542,6 @@ packages:
   - r-matrix
   - r-matrixmodels
   - r-sparsem
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL3
   purls: []
@@ -9657,8 +9648,6 @@ packages:
   - libstdcxx >=13
   - r-base >=4.3,<4.4.0a0
   - r-rcpp >=0.11.0
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL2
   purls: []
@@ -10272,8 +10261,6 @@ packages:
   - libgfortran-ng
   - libgfortran5 >=12.4.0
   - r-base >=4.3,<4.4.0a0
-  arch: x86_64
-  platform: linux
   license: GPL-2.0-or-later
   license_family: GPL3
   purls: []
@@ -10289,8 +10276,6 @@ packages:
   - r-cli >=3.4.0
   - r-rlang >=1.1.0
   - r-vctrs
-  arch: x86_64
-  platform: linux
   license: MIT
   license_family: MIT
   purls: []
@@ -11622,6 +11607,16 @@ packages:
   - pkg:pypi/types-python-dateutil?source=hash-mapping
   size: 21850
   timestamp: 1733279726734
+- conda: https://conda.anaconda.org/conda-forge/noarch/types-pytz-2025.2.0.20250516-pyhd8ed1ab_0.conda
+  sha256: feabb4bf7f18285ba041a61d32f30336455f8b53d773c92fd5fddd34188918d6
+  md5: 795bb35771205d19d6ff110b5d0eb83f
+  depends:
+  - python >=3.9
+  license: Apache-2.0 AND MIT
+  purls:
+  - pkg:pypi/types-pytz?source=hash-mapping
+  size: 19677
+  timestamp: 1747397547475
 - conda: https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.12.2-hd8ed1ab_1.conda
   noarch: python
   sha256: c8e9c1c467b5f960b627d7adc1c65fece8e929a3de89967e91ef0f726422fd32

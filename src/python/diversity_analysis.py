@@ -5,8 +5,12 @@ from typing import Optional
 import biom  # type: ignore
 import numpy as np
 import pandas as pd
+import unifrac
 from biom.table import Table  # type: ignore
-from gemelli.rpca import rpca  # type: ignore
+from gemelli.rpca import (
+    phylogenetic_rpca,
+    rpca,  # type: ignore
+)
 from qiime2 import Artifact  # type: ignore
 from qiime2.plugins.diversity.pipelines import alpha_phylogenetic
 from qiime2.plugins.phylogeny.pipelines import align_to_tree_mafft_fasttree
@@ -16,61 +20,56 @@ from skbio import DistanceMatrix, OrdinationResults
 from skbio.diversity import alpha, beta_diversity
 from sklearn.manifold import MDS
 
+from python.processing import reformat_taxonomy
+
 
 def generate_phylogenetic_tree_with_qiime2(input_fasta: str, threads, output_dir: str):
     """
     Generates a phylogenetic tree from an input FASTA file using QIIME2 MAFFT and FastTree.
 
-    Parameters:
-    - input_fasta (str): Path to the input FASTA file.
-    - num_threads (int): Number of threads to use.
-    - output_dir (str): Directory where output tree files should be saved.
-
     Returns:
-    - qiime2.Artifact: The rooted tree QIIME2 artifact object.
+    - rooted_tree (Artifact): The rooted tree QIIME2 artifact object.
+    - unrooted_tree (Artifact): The unrooted tree QIIME2 artifact object.
+    - rooted_tree_newick (str): Path to the exported rooted tree in Newick format.
     """
-
     rooted_tree_file = os.path.join(output_dir, "rooted_tree.qza")
     unrooted_tree_file = os.path.join(output_dir, "unrooted_tree.qza")
-    # Skip if output directory already exists and read in trees
-    if os.path.exists(output_dir):
-        print(f"Output directory {output_dir} already exists.")
-        print("Reading in existing trees...")
-        # Load existing trees
+    rooted_tree_newick_path = os.path.join(output_dir, "tree.nwk")
 
+    # Skip if output directory already exists and read in trees
+    if os.path.exists(rooted_tree_file) and os.path.exists(rooted_tree_newick_path):
+        print(f"Output files already exist in {output_dir}. Skipping tree generation.")
+        print("Reading in existing trees...")
         rooted_tree = Artifact.load(rooted_tree_file)
         unrooted_tree = Artifact.load(unrooted_tree_file)
+        return rooted_tree, unrooted_tree, rooted_tree_newick_path
 
-        return rooted_tree, unrooted_tree
     print("Starting to generate phylogenetic tree...")
-
-    # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    # Import sequences as a QIIME2 artifact
     rep_seq_artifact = Artifact.import_data(
         type="FeatureData[Sequence]", view=input_fasta
     )
 
     print("✅ Finished reading in sequences.")
 
-    # Run alignment and tree-building
     action_results = align_to_tree_mafft_fasttree(
         sequences=rep_seq_artifact, n_threads=threads
     )
 
-    # Extract rooted and unrooted tree objects
     rooted_tree = action_results.rooted_tree
     unrooted_tree = action_results.tree
-
-    # Save trees to output directory
 
     rooted_tree.save(rooted_tree_file)
     unrooted_tree.save(unrooted_tree_file)
     print(f"Rooted tree saved to {rooted_tree_file}")
     print(f"Unrooted tree saved to {unrooted_tree_file}")
 
-    return rooted_tree, unrooted_tree
+    # Export rooted tree to Newick format
+    rooted_tree.export_data(output_dir)
+    print(f"Rooted tree exported to Newick format at {output_dir}")
+
+    return rooted_tree, unrooted_tree, rooted_tree_newick_path
 
 
 def rarefy_df(
@@ -288,6 +287,57 @@ def perform_rpca(
     return ordination, robust_aitchison_dm
 
 
+def perform_phylo_rpca(
+    asv_table_df: pd.DataFrame,
+    rooted_tree_newick_path: str,
+    taxonomy_df: pd.DataFrame,
+    output_file: str,
+) -> tuple[OrdinationResults, DistanceMatrix, Artifact, pd.DataFrame, pd.DataFrame]:
+    """Perform Phylogenetic RPCA on ASV table, tree, and taxonomy.
+
+    Args:
+        asv_table_df (pd.DataFrame): Feature table (features x samples).
+        rooted_tree_newick_path (str): Path to the rooted tree in Newick format.
+        taxonomy_df (pd.DataFrame): Taxonomy DataFrame (required).
+        output_file (str): Path to output distance matrix file.
+
+    Returns:
+        tuple: (OrdinationResults, DistanceMatrix)
+    """
+    # Convert DataFrame to BIOM Table
+    biom_table = Table(
+        asv_table_df.values,
+        observation_ids=asv_table_df.index.astype(str),
+        sample_ids=asv_table_df.columns.astype(str),
+    )
+
+    taxonomy_df = taxonomy_df[["Taxon", "Confidence"]]
+
+    # Run Phylogenetic RPCA with taxonomy
+    ordination, distance_matrix, pruned_tree, filtered_table, filtered_taxonomy = (
+        phylogenetic_rpca(
+            table=biom_table,
+            phylogeny=rooted_tree_newick_path,
+            taxonomy=taxonomy_df,
+            min_sample_count=500,
+        )
+    )
+
+    filtered_taxonomy = reformat_taxonomy(taxonomy_df=filtered_taxonomy)
+
+    # Write outputs
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    ordination.write(
+        output_file.replace("distance_matrix.txt", "ordination.txt"),
+        format="ordination",
+    )
+    distance_matrix.write(output_file)
+
+    print(f"Phylogenetic RPCA results saved to {output_file} and ordination file.")
+
+    return ordination, distance_matrix, pruned_tree, filtered_table, filtered_taxonomy
+
+
 def perform_bray_curtis(
     rarefied_table_df: pd.DataFrame,
     output_file: str,
@@ -332,6 +382,28 @@ def perform_bray_curtis(
     print(f"Bray-Curtis distance matrix saved to {output_file}")
 
     return bray_curtis_dm
+
+
+def perform_generalized_unifrac_distance(
+    biom_table_path: str, rooted_tree_newick_path: str, alpha: float = 0.5
+) -> DistanceMatrix:
+    """Calculate Unifrac distance matrix from a BIOM table and a rooted tree.
+
+    Args:
+        biom_table_path (str): Path to the BIOM file (must be in BIOM 2.1 format).
+        rooted_tree_newick_path (str): Path to the rooted tree in Newick format.
+        alpha (float, optional): Generalized UniFrac alpha parameter (default 0.5).
+
+    Returns:
+        DistanceMatrix: A UniFrac distance matrix between the samples.
+    """
+    # Compute Generalized UniFrac distance matrix
+    unifrac_distance = unifrac.generalized(
+        table=biom_table_path,
+        phylogeny=rooted_tree_newick_path,
+        alpha=alpha,
+    )
+    return unifrac_distance
 
 
 def perform_permanova_with_vegan(

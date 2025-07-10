@@ -3,34 +3,29 @@ import os
 import re
 import subprocess
 import sys
-import uuid
 import warnings
 from pathlib import Path
 from typing import List
 
 import biom
-import matplotlib.pyplot as plt
-import numpy as np
+import h5py
 import pandas as pd
-import qiime2
-import seaborn as sns
-from Bio import SeqIO
-from PIL import Image
-from rpy2.robjects import StrVector, pandas2ri, r
-from rpy2.robjects.vectors import ListVector
-from skbio import DistanceMatrix, OrdinationResults
+from biom.table import Table
 
 from python.differential_abundance_analysis import (
     create_taxa_tables,
     linda_daa_asv,
+    linda_daa_picrust2,
     linda_daa_taxon,
 )
 from python.diversity_analysis import (
     calculate_alpha_diversity,
     generate_phylogenetic_tree_with_qiime2,
     perform_bray_curtis,
+    perform_generalized_unifrac_distance,
     perform_nmds,
     perform_permanova_with_vegan,
+    perform_phylo_rpca,
     perform_rpca,
     rarefy_df,
 )
@@ -150,30 +145,28 @@ def depth_filtering(table: pd.DataFrame, depth_threshold: float) -> pd.DataFrame
     return table.loc[:, sample_depths >= depth_threshold]
 
 
-def prevalance_filtering(
-    otu_table: pd.DataFrame, prevalence_threshold: float
-) -> pd.DataFrame:
-    """Remove features from feature table with prevalence below threshold."""
-    feature_prevalence = (otu_table > 0).sum(axis=1) / otu_table.shape[1] * 100
-
-    # Remove features with prevalence below threshold
-    return otu_table.loc[feature_prevalence >= prevalence_threshold, :]
-
-
-def convert_to_biom_format(asv_table_df: pd.DataFrame, output_file: str) -> biom.Table:
+def convert_to_biom_format(asv_table_df: pd.DataFrame, output_file: str) -> Table:
     """
     Convert a DataFrame to BIOM format and save it to a file.
 
     Args:
-        asv_table (pd.DataFrame): The ASV table to convert.
-        output_file (str): The path to save the BIOM file.
-    """
+        asv_table_df (pd.DataFrame): The ASV table (rows=ASVs, columns=samples).
+        output_file (str): Path to save the BIOM file (.biom).
 
-    biom_table = biom.Table(
+    Returns:
+        biom.Table: The resulting BIOM-format table.
+    """
+    biom_table = Table(
         asv_table_df.values,
         observation_ids=asv_table_df.index.astype(str),
         sample_ids=asv_table_df.columns.astype(str),
     )
+
+    # Write using HDF5 file handle
+    with h5py.File(output_file, "w") as f:
+        biom_table.to_hdf5(f, generated_by="convert_to_biom_format")
+
+    return biom_table
 
 
 def copy_to_dropbox(source: str, destination: str, exclude_dirs: List[str]):
@@ -219,7 +212,7 @@ def main():
     threads, wor_dir = parse_arguments()
 
     # Keywords to filter
-    keywords_to_filter = ["Chloroplast", "Mitochondrion"]
+    # keywords_to_filter = ["Chloroplast", "Mitochondrion"]
 
     # Display the values for now (can be used later in the script)
     print(f"Number of threads: {threads}")
@@ -288,12 +281,6 @@ def main():
     asv_table_dir = os.path.join(wor_dir, "tables", "asv_tables")
     asv_table_file = os.path.join(asv_table_dir, "asv_table.csv")
 
-    # Convert ASV table BIOM format
-    asv_table_biom = os.path.join(asv_table_dir, "asv_table.biom")
-
-    # Check if the ASV table BIOM file exists, if not, convert it
-    # biom convert -i input.csv -o output.biom --to-hdf5 --table-type="OTU table" --header-key taxonomy
-
     # Read ASV table
     print(f"Reading ASV table from: {asv_table_file}")
     asv_table_df = pd.read_csv(asv_table_file, index_col=0)
@@ -306,6 +293,14 @@ def main():
     # Remove saples that dont start with "OAC"
     asv_table_df = asv_table_df.filter(regex="^OAC", axis=1)
 
+    # Define path to save the ASV table in BIOM format
+    asv_table_biom = os.path.join(asv_table_dir, "asv_table.biom")
+
+    biom_table = convert_to_biom_format(
+        asv_table_df=asv_table_df,
+        output_file=asv_table_biom,
+    )
+
     # Save out merged data as csv
     merged_data_file = os.path.join(wor_dir, "metadata", "merged_data.csv")
 
@@ -314,6 +309,120 @@ def main():
         wor_dir=wor_dir,
         output_path=merged_data_file,
     )
+
+    ###############################
+    # Perform PICRust2 analysis
+    ################################
+
+    # Define directory for PICRUSt2 analysis
+    picrust2_dir = os.path.join(wor_dir, "picrust2_analysis")
+
+    if os.path.exists(picrust2_dir):
+        print(
+            f"PICRUSt2 output directory {picrust2_dir} already exists. Skipping PICRUSt2 analysis."
+        )
+    else:
+        command = [
+            "mamba",
+            "run",
+            "-n",
+            "picrust2",
+            "picrust2_pipeline.py",
+            "-s",
+            rep_seq_fasta,
+            "-i",
+            asv_table_biom,
+            "-o",
+            picrust2_dir,
+            "-p",
+            "1",
+        ]
+
+        print(f"Running PICRUSt2 with command: {' '.join(command)}")
+        # Run the command
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print("PICRUSt2 analysis failed! Exiting...")
+            print(result.stderr)
+            sys.exit(1)
+
+        print("PICRUSt2 analysis completed successfully.")
+
+    # Define pathway types and their parameters
+    pathway_types = [
+        {
+            "name": "KO",
+            "file": os.path.join(
+                picrust2_dir, "KO_metagenome_out", "pred_metagenome_unstrat.tsv.gz"
+            ),
+        },
+        {
+            "name": "EC",
+            "file": os.path.join(
+                picrust2_dir, "EC_metagenome_out", "pred_metagenome_unstrat.tsv.gz"
+            ),
+        },
+        {
+            "name": "MetaCyc",
+            "file": os.path.join(
+                picrust2_dir, "pathways_out", "path_abun_unstrat.tsv.gz"
+            ),
+        },
+    ]
+
+    pathway_dfs = {}
+
+    for pathway in pathway_types:
+        name = pathway["name"]
+        infile = pathway["file"]
+        outfile = infile.replace(".tsv.gz", "_descrip.tsv.gz")
+
+        # Add descriptions
+        command = [
+            "mamba",
+            "run",
+            "-n",
+            "picrust2",
+            "add_descriptions.py",
+            "-i",
+            infile,
+            "-m",
+            name,
+            "-o",
+            outfile,
+        ]
+        print(f"Adding descriptions to {name} with command: {' '.join(command)}")
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Adding descriptions to {name} failed! Exiting...")
+            print(result.stderr)
+            sys.exit(1)
+        print(f"Descriptions added to {name} successfully.")
+
+        # Read and re-index
+        df = pd.read_csv(outfile, sep="\t", index_col=0)
+
+        if pathway["name"] == "KO":
+            df.index = [
+                f"{idx.split(':')[1]} | {row['description']}"
+                if ":" in idx
+                else f"{idx} | {row['description']}"
+                for idx, row in df.iterrows()
+            ]
+        elif pathway["name"] == "EC":
+            df.index = df.index.astype(str) + " | " + df["description"].astype(str)
+        elif pathway["name"] == "MetaCyc":
+            df.index = df.index.astype(str) + " | " + df["description"].astype(str)
+        else:
+            raise ValueError(f"Unknown pathway type: {pathway['name']}")
+        df = df.drop(columns=["description"])
+        pathway_dfs[name] = df
+
+    # Unpack for later use
+    kegg_pathways_df = pathway_dfs["KO"]
+    enzyme_commission_df = pathway_dfs["EC"]
+    metabolic_pathways_df = pathway_dfs["MetaCyc"]
 
     ###############################
     # Ecological diversity analysis
@@ -325,9 +434,15 @@ def main():
     # Define directory for phlogenetics anaylsis
     phylo_dir = os.path.join(wor_dir, "phylogenetic_tree")
 
-    rooted_tree, unrooted_tree = generate_phylogenetic_tree_with_qiime2(
-        input_fasta=rep_seq_fasta, threads=threads, output_dir=phylo_dir
+    rooted_tree, unrooted_tree, rooted_tree_newick_path = (
+        generate_phylogenetic_tree_with_qiime2(
+            input_fasta=rep_seq_fasta, threads=threads, output_dir=phylo_dir
+        )
     )
+
+    print(rooted_tree)
+    print(unrooted_tree)
+    print(rooted_tree_newick_path)
 
     # Filter OTU table based on read depth
     asv_table_dep_fil_df = depth_filtering(asv_table_df, depth_threshold=2000)
@@ -382,13 +497,27 @@ def main():
             )
             continue
 
+        # Define output file for the ASV table in BIOM format
+        biom_file_path = os.path.join(
+            asv_table_dir, f"asv_table_location_{location}.biom"
+        )
+
+        # Convert the ASV table to BIOM format
+        asv_table_location_biom = convert_to_biom_format(
+            asv_table_df=asv_table_location,
+            output_file=biom_file_path,
+        )
         #########################################
         # Differential Abundance Analysis (LINDA)
         #########################################
 
         # Define output file for DAA results
         daa_file = os.path.join(
-            wor_dir, "daa_results", "diagnosis", f"daa_results_location_{location}.csv"
+            wor_dir,
+            "daa_results",
+            "diagnosis",
+            "asv_level",
+            f"daa_asv_results_location_{location}.csv",
         )
 
         # Run LINDA analysis
@@ -426,8 +555,9 @@ def main():
             output_file = os.path.join(
                 wor_dir,
                 "daa_results",
-                "taxa",
-                f"daa_results_{rank}_location_{location}.csv",
+                "diagnosis",
+                f"{rank}_level",
+                f"daa_{rank}_results_location_{location}.csv",
             )
 
             taxon_daa_results_df, taxon_daa_results_fil_df = linda_daa_taxon(
@@ -436,6 +566,71 @@ def main():
                 primary_variable="Diagnosis",
                 output_file=output_file,
             )
+
+        # Differential Abundance Analysis (LINDA) on KEGG pathways
+        print("Performing DAA on KEGG pathways...")
+
+        kegg_table_location = kegg_pathways_df[location_df.index]
+
+        # Define output file for DAA results
+        kegg_daa_file = os.path.join(
+            wor_dir,
+            "daa_results",
+            "diagnosis",
+            "kegg_level",
+            f"daa_kegg_results_location_{location}.csv",
+        )
+
+        # Run LINDA analysis on KEGG pathways
+        kegg_daa_results_df, kegg_daa_results_fil_df = linda_daa_picrust2(
+            function_table_df=kegg_table_location,
+            metadata_df=location_df,
+            primary_variable="Diagnosis",
+            output_file=kegg_daa_file,
+        )
+
+        # Differential Abundance Analysis (LINDA) on EC pathways
+        print("Performing DAA on EC pathways...")
+
+        ec_table_location = enzyme_commission_df[location_df.index]
+
+        # Define output file for DAA results
+        ec_daa_file = os.path.join(
+            wor_dir,
+            "daa_results",
+            "diagnosis",
+            "ec_level",
+            f"daa_ec_results_location_{location}.csv",
+        )
+
+        # Run LINDA analysis on EC pathways
+        ec_daa_results_df, ec_daa_results_fil_df = linda_daa_picrust2(
+            function_table_df=ec_table_location,
+            metadata_df=location_df,
+            primary_variable="Diagnosis",
+            output_file=ec_daa_file,
+        )
+
+        # Differential Abundance Analysis (LINDA) on MetaCyc pathways
+        print("Performing DAA on MetaCyc pathways...")
+        meta_table_location = metabolic_pathways_df[location_df.index]
+
+        # Define output file for DAA results
+        meta_daa_file = os.path.join(
+            wor_dir,
+            "daa_results",
+            "diagnosis",
+            "metacyc_level",
+            f"daa_metacyc_results_location_{location}.csv",
+        )
+
+        # Run LINDA analysis on MetaCyc pathways
+        meta_daa_results_df, meta_daa_results_fil_df = linda_daa_picrust2(
+            function_table_df=meta_table_location,
+            metadata_df=location_df,
+            primary_variable="Diagnosis",
+            output_file=meta_daa_file,
+        )
 
         ######################
         # Alpha Diversity
@@ -497,23 +692,32 @@ def main():
             primary_variable="Diagnosis",
         )
 
+        # Perform NMDS on the Bray-Curtis distance matrix
         coordinates_df, normalized_stress = perform_nmds(distance_matrix=bray_curtis_dm)
+
+        # Define a title dictionary for the NMDS plot
+        title_dict = {
+            "primary_variable": "Diagnosis",
+            "title": f"NMDS Plot of Bray-Curtis distances for location {location}",
+        }
 
         nmds_plot = plot_nmds_with_ggplot2(
             nmds_coordinates=coordinates_df,
             metadata=location_df,
-            primary_variable="Diagnosis",
+            title_dict=title_dict,
             stress_value=normalized_stress,
             permanova_results=results_dict,
         )
 
-        beta_figures_dir = os.path.join(wor_dir, "figures", "beta_diversity")
+        beta_figures_dir = os.path.join(
+            wor_dir, "figures", "beta_diversity", "bray_curtis"
+        )
         # Create the directory if it doesn't exist
         os.makedirs(beta_figures_dir, exist_ok=True)
 
         # Define path to save the NMDS plot
         nmds_plot_file_path = os.path.join(
-            beta_figures_dir, f"nmds_plot_location_{location}.png"
+            beta_figures_dir, f"bray_curtis_nmds_plot_location_{location}.png"
         )
         # Save the NMDS plot
         nmds_plot.save(nmds_plot_file_path, format="PNG")
@@ -526,7 +730,7 @@ def main():
 
         # Perform RPCA
         ordination, robust_aitchison_dm = perform_rpca(
-            asv_table_df=rarefied_df, output_file=rpca_distance_matrix_file
+            asv_table_df=asv_table_location, output_file=rpca_distance_matrix_file
         )
 
         # Perform PERMANOVA on the RPCA distance matrix
@@ -536,25 +740,128 @@ def main():
             primary_variable="Diagnosis",
         )
 
+        # Create a title dictionary for the plot
+        title_dict = {
+            "primary_variable": "Diagnosis",
+            "title": f"RPCA Biplot for location {location}",
+        }
+
         rpca_plot = plot_biplot_with_ggplot2(
             ordination=ordination,
             metadata=location_df,
-            primary_variable="Diagnosis",
+            title_dict=title_dict,
             permanova_results=rpca_results_dict,
             taxonomy_table=taxonomy_df,
         )
 
+        beta_figures_dir = os.path.join(
+            wor_dir, "figures", "beta_diversity", "robust_aitchison pca"
+        )
+        # Create the directory if it doesn't exist
+        os.makedirs(beta_figures_dir, exist_ok=True)
+
         # Define path to save the RPCA plot
         rpca_plot_file_path = os.path.join(
-            beta_figures_dir, f"rpca_plot_location_{location}.png"
+            beta_figures_dir, f"rpca_biplot_location_{location}.png"
         )
         # Save the RPCA plot
         rpca_plot.save(rpca_plot_file_path, format="PNG")
         print(f"RPCA plot saved to: {rpca_plot_file_path}")
 
+        phylo_ordination, phylo_rpca, pruned_tree, filtered_table, filtered_taxonomy = (
+            perform_phylo_rpca(
+                asv_table_df=asv_table_location,
+                rooted_tree_newick_path=rooted_tree_newick_path,
+                taxonomy_df=taxonomy_df,
+                output_file=os.path.join(
+                    beta_div_dir, f"phylo_rpca_location_{location}.txt"
+                ),
+            )
+        )
+
+        # Perform PERMANOVA on the phylo RPCA distance matrix
+        phylo_rpca_results_dict = perform_permanova_with_vegan(
+            metadata=location_df,
+            distance_matrix=phylo_rpca,
+            primary_variable="Diagnosis",
+        )
+
+        # Create a title dictionary for the phylo RPCA plot
+        phylo_title_dict = {
+            "primary_variable": "Diagnosis",
+            "title": f"Phylo RPCA Biplot for location {location}",
+        }
+
+        phylo_rpca_plot = plot_biplot_with_ggplot2(
+            ordination=phylo_ordination,
+            metadata=location_df,
+            title_dict=phylo_title_dict,
+            permanova_results=phylo_rpca_results_dict,
+            taxonomy_table=filtered_taxonomy,
+        )
+
+        beta_figures_dir = os.path.join(
+            wor_dir, "figures", "beta_diversity", "phylogenetic_robust aitchison pca"
+        )
+
+        # Create the directory if it doesn't exist
+        os.makedirs(beta_figures_dir, exist_ok=True)
+
+        # Define path to save the phylo RPCA plot
+        phylo_rpca_plot_file_path = os.path.join(
+            beta_figures_dir, f"phylo_rpca_biplot_location_{location}.png"
+        )
+        # Save the phylo RPCA plot
+        phylo_rpca_plot.save(phylo_rpca_plot_file_path, format="PNG")
+        print(f"Phylo RPCA plot saved to: {phylo_rpca_plot_file_path}")
+
+        gu_dm = perform_generalized_unifrac_distance(
+            biom_table_path=biom_file_path,
+            rooted_tree_newick_path=rooted_tree_newick_path,
+        )
+
+        # Perform PERMANOVA on the Generalized UniFrac distance matrix
+        gu_results_dict = perform_permanova_with_vegan(
+            metadata=location_df,
+            distance_matrix=gu_dm,
+            primary_variable="Diagnosis",
+        )
+        # Perform NMDS on the Generalized UniFrac distance matrix
+        gu_coordinates_df, gu_normalized_stress = perform_nmds(distance_matrix=gu_dm)
+
+        # Create a title dictionary for the Generalized UniFrac NMDS plot
+        gu_title_dict = {
+            "primary_variable": "Diagnosis",
+            "title": f"NMDS Plot of Generalized UniFrac distances for location {location}",
+        }
+
+        # Plot NMDS for Generalized UniFrac
+        gu_nmds_plot = plot_nmds_with_ggplot2(
+            nmds_coordinates=gu_coordinates_df,
+            metadata=location_df,
+            title_dict=gu_title_dict,
+            stress_value=gu_normalized_stress,
+            permanova_results=gu_results_dict,
+        )
+
+        beta_figures_dir = os.path.join(
+            wor_dir, "figures", "beta_diversity", "generalized_unifrac"
+        )
+
+        # Create the directory if it doesn't exist
+        os.makedirs(beta_figures_dir, exist_ok=True)
+        # Define path to save the Generalized UniFrac NMDS plot
+        gu_nmds_plot_file_path = os.path.join(
+            beta_figures_dir, f"generalized_unifrac_nmds_plot_location_{location}.png"
+        )
+        # Save the Generalized UniFrac NMDS plot
+        gu_nmds_plot.save(gu_nmds_plot_file_path, format="PNG")
+        print(f"Generalized UniFrac NMDS plot saved to: {gu_nmds_plot_file_path}")
+
+    # Define directory for results
     # Copy the results to Dropboxs
     copy_to_dropbox(
-        source=directory,
+        source=wor_dir,
         destination="onedrive:/sharing/oesphlora/bioinformatics",
         exclude_dirs=["data", "fastq_files"],
     )

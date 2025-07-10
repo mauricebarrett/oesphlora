@@ -170,14 +170,14 @@ def reformat_taxonomy(taxonomy_df: pd.DataFrame):
             to_replace="Unassigned", value="unclassified"
         )
 
-    taxonomy_df["Taxon"] = taxonomy_df["Taxon"].str.replace("; ", ";", regex=False)
-    taxonomy_df["Taxon"] = taxonomy_df["Taxon"].replace(
-        r";p__|;c__|;o__|;f__|;g__|;s__", ";", regex=True
-    )
-    taxonomy_df["Taxon"] = taxonomy_df["Taxon"].replace(r"d__|k__", "", regex=True)
-    taxonomy_df["Taxon"] = taxonomy_df["Taxon"].replace(
-        to_replace="Unassigned", value="unclassified"
-    )
+    # taxonomy_df["Taxon"] = taxonomy_df["Taxon"].str.replace("; ", ";", regex=False)
+    # taxonomy_df["Taxon"] = taxonomy_df["Taxon"].replace(
+    #     r";p__|;c__|;o__|;f__|;g__|;s__", ";", regex=True
+    # )
+    # taxonomy_df["Taxon"] = taxonomy_df["Taxon"].replace(r"d__|k__", "", regex=True)
+    # taxonomy_df["Taxon"] = taxonomy_df["Taxon"].replace(
+    #     to_replace="Unassigned", value="unclassified"
+    # )
 
     return taxonomy_df
 

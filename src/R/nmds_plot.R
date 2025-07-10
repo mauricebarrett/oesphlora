@@ -15,6 +15,10 @@ permanova_results <- list(
 
 
 
+# Pull out title
+plot_title_names <- title_list[[2]]
+
+
 # Prepare the title with stress value and PERMANOVA results
 plot_title_stats <- paste0(
     "Stress: ", round(stress_value, 6), ", ",
@@ -34,11 +38,18 @@ metadata$SampleID <- rownames(metadata)
 nmds_data <- merge(nmds_coordinates_df, metadata, by = "SampleID")
 
 
-nmds_data[[primary_variable]] <- factor(nmds_data[[primary_variable]],
-    levels = c("Control", sort(setdiff(unique(nmds_data[[primary_variable]]), "Control")))
-)
+primary_variable <- title_list[[1]]
 
-print(levels(nmds_data[[primary_variable]]))
+
+nmds_data  <- nmds_data  %>%
+    mutate(
+        !!primary_variable := factor(
+            .data[[primary_variable]],
+            levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+        )
+    )
+
+
 
 # Define a colorblind-friendly palette (Okabe-Ito or similar)
 cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -50,8 +61,6 @@ print(num_treatments)
 
 # Create the final color list with the first being grey
 final_colors <- c("grey", cb_palette[1:(num_treatments - 1)])
-
-
 
 
 # Convert primary_variable string to a formula dynamically
@@ -74,7 +83,7 @@ nmds_plot <- ggplot(bc_data, aes(x = NMDS1, y = NMDS2, color = !!sym(primary_var
     geom_segment(aes(x = NMDS1_centroid, y = NMDS2_centroid, xend = NMDS1, yend = NMDS2, color = !!sym(primary_variable)), size = 1) +
     # stat_ellipse(geom = "polygon", aes(x = NMDS1, y = NMDS2, group = primary_variable, color = primary_variable, fill = primary_variable), level = 0.95, type = "norm", size = 1, alpha = 0.3) +
     labs(
-        title = paste0("NMDS Plot", "\n", plot_title_stats),
+        title = paste0(plot_title_names, "\n", plot_title_stats),
         x = "NMDS1",
         y = "NMDS2"
     ) +

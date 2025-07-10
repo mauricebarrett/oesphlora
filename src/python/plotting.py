@@ -83,7 +83,7 @@ def plot_alpha_diversity_boxplots_with_ggplot2(
 def plot_nmds_with_ggplot2(
     nmds_coordinates: pd.DataFrame,
     metadata: pd.DataFrame,
-    primary_variable: str,
+    title_dict: dict[str, str],
     stress_value: float,
     permanova_results: dict[str, float],
 ) -> Image.Image:
@@ -107,11 +107,12 @@ def plot_nmds_with_ggplot2(
 
     # Convert to R ListVector
     r_permanova_results = ListVector(permanova_results)
+    r_title_dict = ListVector(title_dict)
 
     # Assigning converted dataframes to R's
     r.assign("nmds_coordinates_df", r_nmds_coordinates)
     r.assign("metadata_df", r_metadata)
-    r.assign("primary_variable", primary_variable)
+    r.assign("title_list", r_title_dict)
     r.assign("stress_value", stress_value)
     r.assign("permanova_results", r_permanova_results)
 
@@ -143,20 +144,20 @@ def plot_nmds_with_ggplot2(
 def add_lowest_rank_label(df):
     taxonomic_ranks = ["phylum", "class", "order", "family", "genus", "species"]
 
-    # Determine the lowest classified rank
+    # Determine the lowest classified rank, excluding NaN and 'unclassified'
     df["lowest_classified"] = df.apply(
         lambda row: next(
             (
                 row[rank]
                 for rank in reversed(taxonomic_ranks)
-                if row[rank] != "unclassified"
+                if pd.notna(row[rank]) and row[rank] != "unclassified"
             ),
             "unclassified",
         ),
         axis=1,
     )
 
-    # Create 'Label' by concatenating 'feature_id' with 'lowest_classified'
+    # Create 'label' by concatenating 'feature_id' with 'lowest_classified'
     df["label"] = df["feature_id"] + "=" + df["lowest_classified"]
 
     return df
@@ -165,7 +166,7 @@ def add_lowest_rank_label(df):
 def plot_biplot_with_ggplot2(
     ordination: OrdinationResults,
     metadata: pd.DataFrame,
-    primary_variable: str,
+    title_dict: dict[str, str],
     permanova_results: dict[str, float],
     taxonomy_table: pd.DataFrame,
 ) -> Image.Image:
@@ -175,12 +176,15 @@ def plot_biplot_with_ggplot2(
     Args:
         nmds_coordinates (pd.DataFrame): DataFrame containing NMDS coordinates with samples as rows.
         metadata (pd.DataFrame): Metadata for samples.
-        primary_variable (str): Column in metadata used for coloring the plot.
+        title_dict (dict[str, str]): Dictionary containing titles for the plot.
         stress_value (float): NMDS stress value indicating the goodness of fit.
         permanova_results (dict[str, float])
     Returns:
 
     """
+
+    # Extract primary variable from title_dict
+    primary_variable = title_dict.get("primary_variable", "primary_variable")
 
     # Merge ordination.samples with metadata using the indices
     ord_df = ordination.samples[["PC1", "PC2"]].join(
@@ -224,11 +228,12 @@ def plot_biplot_with_ggplot2(
     # Convert to R ListVector
     r_permanova_results = ListVector(permanova_results)
     r_explained_variance = ListVector(explained_variance_dict)
+    r_title_dict = ListVector(title_dict)
 
     # Assigning converted dataframes to R's
     r.assign("ord_df", r_ord_df)
     r.assign("top_feats_taxa_df", r_top_feats_taxa_df)
-    r.assign("primary_variable", primary_variable)
+    r.assign("title_list", r_title_dict)
     r.assign("permanova_results", r_permanova_results)
     r.assign("explained_variance", r_explained_variance)
 

@@ -13,11 +13,6 @@ merged_df <- merged_df %>%
     )
 
 
-# Debug group levels
-print("Primary variable values:")
-print(levels(factor(merged_df[[primary_variable]])))
-
-
 # Create all possible pairwise comparisons without filtering
 all_groups <- levels(factor(merged_df[[primary_variable]]))
 pairwise_comparisons <- combn(all_groups, 2, simplify = FALSE)

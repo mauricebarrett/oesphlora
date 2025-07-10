@@ -9,17 +9,8 @@ permanova_results <- list(
 )
 
 
-
-# Prepare the title with stress value and PERMANOVA results
-plot_title_names <- 
-    "Robust Aitchison PCA ordination scatter plot"
-
-#     "Trial = ", title_list[[1]],
-#     ", Amplicon type = ", title_list[[2]],
-#     ", Substrate type = ", title_list[[3]],
-#     ", Sample type = ", title_list[[4]]
-# )
-
+# Pull out title
+plot_title_names <- title_list[[2]]
 
 
 # Prepare the title with stress value and PERMANOVA results
@@ -30,13 +21,17 @@ plot_title_stats <- paste0(
 )
 
 
+primary_variable <- title_list[[1]]
 
 
-ord_df[[primary_variable]] <- factor(ord_df[[primary_variable]],
-    levels = c("Control", sort(setdiff(unique(nmds_data[[primary_variable]]), "Control")))
-)
+ord_df <- ord_df %>%
+    mutate(
+        !!primary_variable := factor(
+            .data[[primary_variable]],
+            levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+        )
+    )
 
-print(levels(ord_df[[primary_variable]]))
 
 # Define a colorblind-friendly palette (Okabe-Ito or similar)
 cb_palette <- c(

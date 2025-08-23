@@ -1,6 +1,7 @@
 library(ggplot2)
 library(ggrepel)
 
+
 # PERMANOVA results should be in the form "test_statistic,R_squared,p_value"
 permanova_results <- list(
     "test statistic" = as.numeric(permanova_results$pseudo_F),
@@ -24,13 +25,10 @@ plot_title_stats <- paste0(
 primary_variable <- title_list[[1]]
 
 
-ord_df <- ord_df %>%
-    mutate(
-        !!primary_variable := factor(
-            .data[[primary_variable]],
-            levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
-        )
-    )
+ord_df[[primary_variable]] <- factor(
+    ord_df[[primary_variable]],
+    levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+)
 
 
 # Define a colorblind-friendly palette (Okabe-Ito or similar)
@@ -69,7 +67,15 @@ rpca_data <- merge(ord_df,
 
 
 biplot <- ggplot(data = rpca_data, aes(x = PC1, y = PC2, color = !!sym(primary_variable))) +
-    geom_point(size = 2) +
+    geom_point(aes(fill = !!sym(primary_variable), shape = !!sym(primary_variable)), 
+               size = 3, stroke = 1.2) +
+    # Add ellipses by primary variable
+    stat_ellipse(aes(fill = !!sym(primary_variable)), 
+                 type = "norm", 
+                 level = 0.95, 
+                 alpha = 0.8, 
+                 linetype = "dashed",
+                 linewidth = 1) +
     # geom_point(aes(x = PC1_centroid, y = PC2_centroid, color = !!sym(primary_variable)), size = 4) +
     # geom_segment(aes(x = PC1_centroid, y = PC2_centroid, xend = PC1, yend = PC2, color = !!sym(primary_variable)), size = 1) +
     labs(
@@ -87,6 +93,7 @@ biplot <- ggplot(data = rpca_data, aes(x = PC1, y = PC2, color = !!sym(primary_v
     ) +
     scale_color_manual(values = final_colors) +
     scale_fill_manual(values = final_colors) +
+    scale_shape_manual(values = c(21, 22, 23, 24, 25, 8)) +  # Add this line
     theme_classic() +
     theme(
         axis.line.y = element_line(linetype = 1, linewidth = 1.3, colour = "black"),
@@ -103,10 +110,7 @@ biplot <- ggplot(data = rpca_data, aes(x = PC1, y = PC2, color = !!sym(primary_v
         plot.title = element_text(size = 12, hjust = 0.5, face = "bold", color = "black")
     )
 
-temp_file <- tempfile(fileext = ".png")
-
-png(temp_file, width = 16, height = 9, units = "in", res = 300)
+# Save the plot as a PDF
+pdf(output_file, width = 14, height = 7.88, useDingbats = FALSE)
 print(biplot)
 dev.off()
-
-temp_file

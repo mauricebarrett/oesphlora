@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import unifrac
 from biom.table import Table  # type: ignore
+from gemelli.ctf import ctf  # type: ignore
 from gemelli.rpca import (
     phylogenetic_rpca,
     rpca,  # type: ignore
@@ -21,6 +22,14 @@ from skbio.diversity import alpha, beta_diversity
 from sklearn.manifold import MDS
 
 from python.processing import reformat_taxonomy
+
+
+def depth_filtering(table: pd.DataFrame, depth_threshold: float) -> pd.DataFrame:
+    """Remove samples from feature table with read depth below threshold."""
+    sample_depths = table.sum(axis=0)
+
+    # Remove samples with read depth below threshold
+    return table.loc[:, sample_depths >= depth_threshold]
 
 
 def generate_phylogenetic_tree_with_qiime2(input_fasta: str, threads, output_dir: str):
@@ -105,17 +114,20 @@ def rarefy_df(
         The corresponding rarefied biom.Table object.
     """
 
+    if sampling_depth is None:
+        # Get the minimum sample sum for rarefaction depth from the DataFrame
+        sampling_depth = int(min(df.sum(axis=0)))
+    else:
+        sampling_depth = int(sampling_depth)
+
+    print(f"Sampling depth set to {sampling_depth}.")
+
     # Convert dataframe to biom Table
     biom_table = biom.Table(
         df.values,
         observation_ids=df.index.astype(str),
         sample_ids=df.columns.astype(str),
     )
-
-    if sampling_depth is None:
-        sampling_depth = int(min(biom_table.sum(axis="sample")))
-    else:
-        sampling_depth = int(sampling_depth)
 
     biom_table = biom_table.filter(
         lambda v, i, m: v.sum() >= sampling_depth, inplace=False, axis="sample"
@@ -128,14 +140,7 @@ def rarefy_df(
         seed=random_seed,
     )
 
-    if rarefied_biom_table.is_empty():
-        raise ValueError(
-            "The rarefied table contains no samples or features. "
-            "Verify your table is valid and that you provided a "
-            "shallow enough sampling depth."
-        )
-
-        # Convert the biom table to a QIIME2 artifact
+    # Convert the biom table to a QIIME2 artifact
     rarefied_table_qza = Artifact.import_data(
         "FeatureTable[Frequency]", rarefied_biom_table
     )
@@ -341,23 +346,19 @@ def perform_phylo_rpca(
 def perform_bray_curtis(
     rarefied_table_df: pd.DataFrame,
     output_file: str,
-) -> DistanceMatrix:
+) -> tuple[pd.DataFrame, DistanceMatrix]:
     """Perform Bray-Curtis distance calculation on the rarefied OTU table.
 
     Args:
         rarefied_otu_table (pd.DataFrame): The rarefied OTU table where rows are taxa and columns are samples.
 
     Returns:
-        DistanceMatrix: A Bray-Curtis distance matrix between the samples.
+        pd.DataFrame: A DataFrame representing the Bray-Curtis distance matrix.
+
     """
 
-    # skip if the output file already exists
-    if os.path.exists(output_file):
-        print(
-            f"Output file {output_file} already exists. Skipping Bray-Curtis calculation."
-        )
-        # Return the existing DistanceMatrix
-        return DistanceMatrix.read(output_file)
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
     # Transpose the OTU table to have samples as rows and taxa as columns (as required by Bray-Curtis)
     otu_data = rarefied_table_df.T.to_numpy()
@@ -381,7 +382,7 @@ def perform_bray_curtis(
     bray_curtis_dm.write(output_file)
     print(f"Bray-Curtis distance matrix saved to {output_file}")
 
-    return bray_curtis_dm
+    return bray_curtis_df, bray_curtis_dm
 
 
 def perform_generalized_unifrac_distance(
@@ -397,6 +398,7 @@ def perform_generalized_unifrac_distance(
     Returns:
         DistanceMatrix: A UniFrac distance matrix between the samples.
     """
+
     # Compute Generalized UniFrac distance matrix
     unifrac_distance = unifrac.generalized(
         table=biom_table_path,
@@ -408,14 +410,16 @@ def perform_generalized_unifrac_distance(
 
 def perform_permanova_with_vegan(
     metadata: pd.DataFrame,
-    distance_matrix: DistanceMatrix,
+    distance_df: pd.DataFrame,
     primary_variable: str,
+    strata: str = "False",
 ) -> tuple[dict, pd.DataFrame]:
     """Performs PERMANOVA analysis and tests homogeneity of dispersion using betadisper.
 
     Args:
         metadata (pd.DataFrame): A metadata table containing sample information.
-        distance_matrix (DistanceMatrix): A distance matrix representing the distances between samples.
+        distance_matrix (pd.DataFrame): A distance matrix representing the distances between samples.
+        primary_variable (str): The primary variable/column in the metadata to test.
 
     Returns:
         tuple[dict, pd.DataFrame]: A dictionary containing PERMANOVA and betadisper results and the results DataFrame.
@@ -428,12 +432,13 @@ def perform_permanova_with_vegan(
 
         # Convert pandas DataFrame to R dataframe
         r_metadata = pandas2ri.py2rpy(metadata)
-        r_distance_matrix = pandas2ri.py2rpy(distance_matrix.to_data_frame())
+        r_distance_matrix = pandas2ri.py2rpy(distance_df)
 
     # Assign the metadata and distance matrix to the R environment
     r.assign("distance_matrix", r_distance_matrix)
     r.assign("metadata", r_metadata)
     r.assign("primary_variable", primary_variable)
+    r.assign("strata", strata)
 
     # Construct the path to the R script robustly
     current_script_dir = os.path.dirname(
@@ -493,3 +498,125 @@ def perform_nmds(distance_matrix: DistanceMatrix) -> tuple[pd.DataFrame, float]:
     normalized_stress = np.sqrt(mds.stress_ / np.sum(dist_array**2))
 
     return coordinates_df, normalized_stress
+
+
+def perform_ctf(
+    asv_count_table_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
+    individual_id_column: str,
+    state_column: str,
+    output_dir: str,
+) -> tuple[OrdinationResults, pd.DataFrame]:
+    """Perform Compositional Tensor Factorization (CTF) on BIOM table.
+
+    Args:
+        asv_count_table_biom: BIOM table (feature table)
+        metadata_df (pd.DataFrame): sample metadata
+        individual_id_column (str): subject identifier column
+        state_column (str): state/timepoint column
+        output_dir (str): not currently used
+
+    Returns:
+        tuple[
+            DistanceMatrix,   # distance matrix object (skbio)
+            pd.DataFrame,     # distance matrix as DataFrame
+            pd.DataFrame,     # sample coordinates
+            pd.DataFrame      # feature coordinates
+        ]
+    """
+
+    # Filter asv_count_table_df for depth
+    asv_count_table_df = depth_filtering(asv_count_table_df, depth_threshold=1000)
+
+    # Convert dataframe to biom Table
+    biom_table = biom.Table(
+        asv_count_table_df.values,
+        observation_ids=asv_count_table_df.index.astype(str),
+        sample_ids=asv_count_table_df.columns.astype(str),
+    )
+    print("Performing CTF...")
+    # Run CTF
+    ordination_results, feature_ordination, distance_matrix, sample_df, feature_df = (
+        ctf(
+            biom_table.copy(),
+            sample_metadata=metadata_df,
+            individual_id_column=individual_id_column,
+            state_column=state_column,
+            n_components=2,
+            min_sample_count=500,
+        )
+    )
+    print("CTF complete.")
+
+    # Convert distance matrix to DataFrame
+    distance_df = distance_matrix.to_data_frame()
+
+    # Write output to output_dir
+    # make output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    distance_matrix.write(os.path.join(output_dir, "ctf_distance_matrix.txt"))
+    ordination_results.write(
+        os.path.join(output_dir, "ctf_sample_ordination.txt"), format="ordination"
+    )
+    feature_ordination.write(
+        os.path.join(output_dir, "ctf_feature_ordination.txt"), format="ordination"
+    )
+    sample_df.to_csv(os.path.join(output_dir, "ctf_sample_coordinates.csv"))
+    feature_df.to_csv(os.path.join(output_dir, "ctf_feature_coordinates.csv"))
+
+    return ordination_results, distance_df
+
+
+def perform_pairwise_comparisons_permanova(
+    metadata: pd.DataFrame,
+    distance_df: pd.DataFrame,
+    primary_variable: str,
+    output_file: str,
+    all: bool = False,
+) -> None:
+    """Performs PERMANOVA analysis and tests homogeneity of dispersion using betadisper.
+
+    Args:
+        metadata (pd.DataFrame): A metadata table containing sample information.
+        distance_matrix (pd.DataFrame): A distance matrix representing the distances between samples.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing PERMANOVA and betadisper results, including pseudo-F statistic, p-value, R²,
+                        dispersion F-statistic, and dispersion p-value.
+    """
+
+    if all:
+        strata = "True"
+    else:
+        strata = "False"
+
+    # Activate pandas-to-R conversion
+    pandas2ri.activate()
+
+    # Convert pandas DataFrame to R dataframe
+    r_metadata = pandas2ri.py2rpy(metadata)
+    r_distance_matrix = pandas2ri.py2rpy(distance_df)
+
+    # Assign the metadata and distance matrix to the R environment
+    r.assign("distance_matrix", r_distance_matrix)
+    r.assign("metadata", r_metadata)
+    r.assign("primary_variable", primary_variable)
+    r.assign("strata", strata)
+    r.assign("output_file", output_file)
+
+    # Construct the path
+    # Get current path
+    current_script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the path to the R script
+    r_script_path = os.path.join(
+        current_script_dir, "../R/pairwise_comparisons_adonis.R"
+    )
+    # Ensure the path is absolute
+    r_script_path = os.path.abspath(r_script_path)
+
+    # Read the R code from the provided script
+    with open(r_script_path, "r") as file:
+        r_code = file.read()
+
+    # Execute the R code
+    r(r_code)

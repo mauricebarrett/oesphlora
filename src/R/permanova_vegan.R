@@ -1,12 +1,29 @@
 library(vegan)
 
+set.seed(42)  # Set seed for reproducibility
+
 distance_matrix <- as.dist(distance_matrix)
 
 # Dynamically create the formula using primary_variable
 adonis_formula <- as.formula(paste("distance_matrix ~", primary_variable))
 
-# Run PERMANOVA
-adonis_result <- adonis2(adonis_formula, data = metadata, permutations = 999)
+
+if (strata == "True") {
+  # use patient_id column as strata
+  adonis_result <- adonis2(
+    adonis_formula,
+    data = metadata,
+    permutations = 999,
+    strata = metadata[["patient_id"]]
+  )
+} else {
+  # no strata
+  adonis_result <- adonis2(
+    adonis_formula,
+    data = metadata,
+    permutations = 999
+  )
+}
 
 # Extract specific PERMANOVA results
 pseudo_F <- adonis_result$F[1]

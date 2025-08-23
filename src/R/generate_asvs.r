@@ -154,9 +154,9 @@ print("Read counts written to file.")
 rownames(track) <- sample_names
 head(track, n = 20)
 
-# Remove samples with read number below 3000
-print("Filtering samples with read counts below 3000...")
-valid_samples <- names(which(rowSums(seqtab_nochim) > 3000))
+# Remove samples with read number below 1000
+print("Filtering samples with read counts below 1000...")
+valid_samples <- names(which(rowSums(seqtab_nochim) > 1000))
 seqtab_nochim_5000 <- as.matrix(seqtab_nochim[valid_samples, ])
 
 print("Samples filtered. Remaining samples:")

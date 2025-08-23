@@ -86,7 +86,8 @@ def plot_nmds_with_ggplot2(
     title_dict: dict[str, str],
     stress_value: float,
     permanova_results: dict[str, float],
-) -> Image.Image:
+    output_file: str,
+) -> None:
     """
     Save NMDS coordinates and metadata, then call the R script.
 
@@ -115,6 +116,7 @@ def plot_nmds_with_ggplot2(
     r.assign("title_list", r_title_dict)
     r.assign("stress_value", stress_value)
     r.assign("permanova_results", r_permanova_results)
+    r.assign("output_file", output_file)
 
     # Construct the path
     # Get current path
@@ -129,16 +131,7 @@ def plot_nmds_with_ggplot2(
         r_code = file.read()
 
     # Execute the R code
-    temp_file_path = r(r_code)[0]
-
-    # Read the image into Python as a PIL Image object
-    with open(temp_file_path, "rb") as f:
-        img = Image.open(io.BytesIO(f.read()))
-
-    # Clean up the temporary file
-    os.remove(temp_file_path)
-
-    return img
+    r(r_code)
 
 
 def add_lowest_rank_label(df):
@@ -164,39 +157,54 @@ def add_lowest_rank_label(df):
 
 
 def plot_biplot_with_ggplot2(
-    ordination: OrdinationResults,
+    ordination_results: OrdinationResults,
     metadata: pd.DataFrame,
     title_dict: dict[str, str],
     permanova_results: dict[str, float],
     taxonomy_table: pd.DataFrame,
-) -> Image.Image:
+    output_file: str,
+    all: bool = False,
+) -> None:
     """
-
+    Create a biplot using ggplot2 in R.
 
     Args:
-        nmds_coordinates (pd.DataFrame): DataFrame containing NMDS coordinates with samples as rows.
+        ordination_results (OrdinationResults): Ordination results containing samples and features.
         metadata (pd.DataFrame): Metadata for samples.
         title_dict (dict[str, str]): Dictionary containing titles for the plot.
-        stress_value (float): NMDS stress value indicating the goodness of fit.
-        permanova_results (dict[str, float])
-    Returns:
+        permanova_results (dict[str, float]): PERMANOVA results.
+        taxonomy_table (pd.DataFrame): Taxonomy table for feature annotation.
+        output_file (str): Path to save the output plot.
+        all (bool): If True, merge by 'patient_id'. If False, merge by index. Default False.
 
+    Returns:
+        None
     """
 
     # Extract primary variable from title_dict
     primary_variable = title_dict.get("primary_variable", "primary_variable")
 
-    # Merge ordination.samples with metadata using the indices
-    ord_df = ordination.samples[["PC1", "PC2"]].join(
-        metadata[[primary_variable]], how="inner"
-    )
+    # Merge ordination.samples with metadata
+    if all:
+        # Merge by patient_id column
+        ord_df = ordination_results.samples[["PC1", "PC2"]].merge(
+            metadata[[primary_variable, "patient_id"]],
+            left_index=True,
+            right_on="patient_id",
+            how="inner",
+        )
+    else:
+        # Merge using indices (original behavior)
+        ord_df = ordination_results.samples[["PC1", "PC2"]].join(
+            metadata[[primary_variable]], how="inner"
+        )
 
     # Pull out from ordination data explained variance
-    explained_variance = ordination.proportion_explained
+    explained_variance = ordination_results.proportion_explained
     # Convert Pandas Series to a dictionary
     explained_variance_dict = explained_variance.to_dict()
 
-    features = ordination.features[["PC1", "PC2"]]
+    features = ordination_results.features[["PC1", "PC2"]]
     norms = np.sqrt(
         (features["PC1"] ** 2 * explained_variance["PC1"])
         + (features["PC2"] ** 2 * explained_variance["PC2"])
@@ -207,10 +215,10 @@ def plot_biplot_with_ggplot2(
     # Reset the index
     top_features_df.reset_index(inplace=True)
 
-    # Rename index column to  feature_id
+    # Rename index column to feature_id
     top_features_df.rename(columns={"index": "feature_id"}, inplace=True)
 
-    # Add taxanomic information
+    # Add taxonomic information
     top_feats_taxa_df = top_features_df.merge(
         taxonomy_table, how="left", left_on="feature_id", right_index=True
     )
@@ -236,6 +244,7 @@ def plot_biplot_with_ggplot2(
     r.assign("title_list", r_title_dict)
     r.assign("permanova_results", r_permanova_results)
     r.assign("explained_variance", r_explained_variance)
+    r.assign("output_file", output_file)
 
     # Construct the path
     # Get current path
@@ -250,13 +259,69 @@ def plot_biplot_with_ggplot2(
         r_code = file.read()
 
     # Execute the R code
-    temp_file_path = r(r_code)[0]
+    r(r_code)
 
-    # Read the image into Python as a PIL Image object
-    with open(temp_file_path, "rb") as f:
-        img = Image.open(io.BytesIO(f.read()))
 
-    # Clean up the temporary file
-    os.remove(temp_file_path)
+def plot_heatmap_of_daa(
+    daa_df: pd.DataFrame,
+    title_dict: dict[str, str],
+    output_file: str,
+    asv: bool = False,
+) -> None:
+    """
+    Plots a heatmap of differential abundance analysis results using ggplot2 in R.
 
-    return img
+    Args:
+        daa_df (pd.DataFrame): DataFrame containing differential abundance analysis results.
+        metadata (pd.DataFrame): Metadata for samples.
+        primary_variable (str): Primary variable for grouping samples.
+        output_file (str): Path to save the output heatmap image.
+    """
+
+    # Add lowest rank label to daa_df if asv is True
+    if asv:
+        daa_df = add_lowest_rank_label(daa_df)
+        # drop feature_id column if it exists
+        if "feature_id" in daa_df.columns:
+            daa_df.drop(columns=["feature_id"], inplace=True)
+        # Change label column to 'feature_id'
+        daa_df.rename(columns={"label": "feature_id"}, inplace=True)
+
+    # if less than 2 unique feature_ids, skip plotting
+    if daa_df["feature_id"].nunique() < 2:
+        print("Not enough unique features to plot heatmap. Skipping.")
+        return
+
+    # create output directory if it does not exist
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Activate pandas-to-R conversion
+    pandas2ri.activate()
+
+    # Convert pandas dataframes to R dataframes
+    r_daa_df = pandas2ri.py2rpy(daa_df)
+
+    # Convert to R ListVector
+    r_title_dict = ListVector(title_dict)
+
+    # Assigning converted dataframes to R's
+    r.assign("daa_df", r_daa_df)
+    r.assign("title_list", r_title_dict)
+    r.assign("output_file", output_file)
+
+    # Construct the path
+    # Get current path
+    current_script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the path to the R script
+    r_script_path = os.path.join(current_script_dir, "../R/daa_heatmap.R")
+    # Ensure the path is absolute
+    r_script_path = os.path.abspath(r_script_path)
+
+    # Read the R code from the provided script
+    with open(r_script_path, "r") as file:
+        r_code = file.read()
+
+    # Execute the R code
+    r(r_code)

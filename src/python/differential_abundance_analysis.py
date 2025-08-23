@@ -8,14 +8,14 @@ from rpy2 import robjects
 from rpy2.robjects import pandas2ri, r
 
 
-def prevalance_filtering(
-    otu_table: pd.DataFrame, prevalence_threshold: float
+def prevalence_filtering(
+    feature_table: pd.DataFrame, prevalence_threshold: float
 ) -> pd.DataFrame:
     """Remove features from feature table with prevalence below threshold."""
-    feature_prevalence = (otu_table > 0).sum(axis=1) / otu_table.shape[1] * 100
+    feature_prevalence = (feature_table > 0).sum(axis=1) / feature_table.shape[1] * 100
 
     # Remove features with prevalence below threshold
-    return otu_table.loc[feature_prevalence >= prevalence_threshold, :]
+    return feature_table.loc[feature_prevalence >= prevalence_threshold, :]
 
 
 def linda_daa_asv(
@@ -312,12 +312,7 @@ def linda_daa_taxon(
         r.assign("metadata_df", r_metadata_subset_df)
         formula = f"~ {primary_variable}"
         r.assign("formula", formula)
-
-        # Retrieve the factor levels of the primary variable in R
-        levels_r = r(f"levels(as.factor(r_metadata${primary_variable}))")
-        levels = list(levels_r)
-
-        r_group_a, r_group_b = levels
+        r.assign("primary_variable", primary_variable)
 
         # Construct the path to the R script robustly
         current_script_dir = os.path.dirname(
@@ -344,17 +339,19 @@ def linda_daa_taxon(
         linda_results_df["neg_log10_pvalue"] = -np.log10(linda_results_df["padj"])
 
         linda_results_df["direction"] = linda_results_df["log2FoldChange"].apply(
-            lambda log2fc: f"Up in {r_group_b}" if log2fc > 0 else f"Up in {r_group_a}"
+            lambda log2fc: f"Up in {group_b}" if log2fc > 0 else f"Up in {group_a}"
         )
 
-        linda_results_df["comparison"] = f"{r_group_a} vs {r_group_b}"
+        print(f"Appending results for {group_a} vs {group_b}")
+
+        linda_results_df["comparison"] = f"{group_a} vs {group_b}"
         results.append(linda_results_df)
 
     # Combine all results
     results_df = pd.concat(results)
 
     # Sort values
-    results_df = results_df.sort_values(by="padj")
+    # results_df = results_df.sort_values(by="comparison")
 
     # Reset the index
     results_df = results_df.reset_index()

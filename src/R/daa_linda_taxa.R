@@ -1,4 +1,14 @@
 library(MicrobiomeStat)
+library(dplyr)
+
+
+metadata_df <- metadata_df %>%
+    mutate(
+        !!primary_variable := factor(
+            .data[[primary_variable]],
+            levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+        )
+    )
 
 linda_output = MicrobiomeStat::linda(
     taxon_table_df,

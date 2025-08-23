@@ -76,17 +76,28 @@ bc_data <- merge(nmds_data,
     suffixes = c("", "_centroid")
 )
 
+print(unique(bc_data[[primary_variable]]))
+
+print(final_colors)
+
 # Create the NMDS plot
 nmds_plot <- ggplot(bc_data, aes(x = NMDS1, y = NMDS2, color = !!sym(primary_variable))) +
-    geom_point(size = 2, alpha = 0.7) +
+    geom_point(aes(fill = !!sym(primary_variable), shape = !!sym(primary_variable)), 
+               size = 3, stroke = 1.2) +
     geom_point(aes(x = NMDS1_centroid, y = NMDS2_centroid, color = !!sym(primary_variable)), size = 4) +
-    geom_segment(aes(x = NMDS1_centroid, y = NMDS2_centroid, xend = NMDS1, yend = NMDS2, color = !!sym(primary_variable)), size = 1) +
+        stat_ellipse(aes(fill = !!sym(primary_variable)), 
+                 type = "norm", 
+                 level = 0.95, 
+                 alpha = 0.8, 
+                 linetype = "dashed",
+                 linewidth = 1) +
     # stat_ellipse(geom = "polygon", aes(x = NMDS1, y = NMDS2, group = primary_variable, color = primary_variable, fill = primary_variable), level = 0.95, type = "norm", size = 1, alpha = 0.3) +
     labs(
         title = paste0(plot_title_names, "\n", plot_title_stats),
         x = "NMDS1",
         y = "NMDS2"
     ) +
+    scale_shape_manual(values = c(21, 22, 23, 24, 25, 8)) +  # Add this line
     scale_color_manual(values = final_colors) +
     scale_fill_manual(values = final_colors) +
     theme_classic() +
@@ -105,10 +116,7 @@ nmds_plot <- ggplot(bc_data, aes(x = NMDS1, y = NMDS2, color = !!sym(primary_var
         plot.title = element_text(size = 12, hjust = 0.5, face = "bold", color = "black")
     )
 
-temp_file <- tempfile(fileext = ".png")
-
-png(temp_file, width = 16, height = 9, units = "in", res = 300)
+# Save the plot to a file
+pdf(output_file, width = 14, height = 8, useDingbats = FALSE)
 print(nmds_plot)
 dev.off()
-
-temp_file

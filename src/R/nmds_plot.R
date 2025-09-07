@@ -41,13 +41,30 @@ nmds_data <- merge(nmds_coordinates_df, metadata, by = "SampleID")
 primary_variable <- title_list[[1]]
 
 
-nmds_data  <- nmds_data  %>%
-    mutate(
-        !!primary_variable := factor(
-            .data[[primary_variable]],
-            levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+if (primary_variable=="Diagnosis") {
+
+    nmds_data  <- nmds_data  %>%
+        mutate(
+            !!primary_variable := factor(
+                .data[[primary_variable]],
+                levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+            )
         )
-    )
+} else if (primary_variable=="sample_location") {
+
+    nmds_data  <- nmds_data  %>%
+        mutate(
+            !!primary_variable := factor(
+                .data[[primary_variable]],
+                levels = c("biopsy_location_1", "biopsy_location_2", "biopsy_location_3", "biopsy_location_4", "biopsy_location_5")
+            )
+        )
+} else {
+    # Error handling for unexpected primary_variable values
+    stop(paste("Unexpected primary_variable value:", primary_variable))
+
+}
+
 
 
 
@@ -76,9 +93,6 @@ bc_data <- merge(nmds_data,
     suffixes = c("", "_centroid")
 )
 
-print(unique(bc_data[[primary_variable]]))
-
-print(final_colors)
 
 # Create the NMDS plot
 nmds_plot <- ggplot(bc_data, aes(x = NMDS1, y = NMDS2, color = !!sym(primary_variable))) +

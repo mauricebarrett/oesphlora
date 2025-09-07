@@ -10,11 +10,62 @@ from rpy2.robjects.vectors import ListVector
 from skbio import DistanceMatrix, OrdinationResults
 
 
+def plot_heatmap_of_alpha_diversity(
+    data_df: pd.DataFrame,
+    title_dict: dict[str, str],
+    output_file: str,
+) -> None:
+    """
+    Plots a heatmap of differential abundance analysis results using ggplot2 in R.
+
+    Args:
+        daa_df (pd.DataFrame): DataFrame containing differential abundance analysis results.
+        metadata (pd.DataFrame): Metadata for samples.
+        primary_variable (str): Primary variable for grouping samples.
+        output_file (str): Path to save the output heatmap image.
+    """
+
+    # create output directory if it does not exist
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Activate pandas-to-R conversion
+    pandas2ri.activate()
+
+    # Convert pandas dataframes to R dataframes
+    r_data_df = pandas2ri.py2rpy(data_df)
+
+    # Convert to R ListVector
+    r_title_dict = ListVector(title_dict)
+
+    # Assigning converted dataframes to R's
+    r.assign("data_df", r_data_df)
+    r.assign("title_list", r_title_dict)
+    r.assign("output_file", output_file)
+
+    # Construct the path
+    # Get current path
+    current_script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the path to the R script
+    r_script_path = os.path.join(current_script_dir, "../R/alpha_diversity_heatmap.R")
+    # Ensure the path is absolute
+    r_script_path = os.path.abspath(r_script_path)
+
+    # Read the R code from the provided script
+    with open(r_script_path, "r") as file:
+        r_code = file.read()
+
+    # Execute the R code
+    r(r_code)
+
+
 def plot_alpha_diversity_boxplots_with_ggplot2(
     alpha_diversity_df: pd.DataFrame,
     metadata: pd.DataFrame,
     primary_variable: str,
-) -> Image.Image:
+    output_file: str,
+) -> None:
     """Plots the alpha diversity metrics for each sample, annotated with precomputed p-values,
     and saves the combined plot as a PDF.
 
@@ -25,11 +76,16 @@ def plot_alpha_diversity_boxplots_with_ggplot2(
 
     """
 
+    # create output directory if it does not exist
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     # Transfrom alpha_diversity_df to long format
     melted_df = alpha_diversity_df.melt(
         id_vars=["sample_id"],
         value_vars=[
-            "Observed OTUs",
+            "Observed Features",
             "Simpson's dominance index",
             "Simpson's diversity index",
             "Faith's phylogenetic diversity",
@@ -54,6 +110,7 @@ def plot_alpha_diversity_boxplots_with_ggplot2(
     # Assigning converted dataframes to R's
     r.assign("merged_df", r_merged_df)
     r.assign("primary_variable", primary_variable)
+    r.assign("output_file", output_file)
 
     # Construct the path
     # Get current path
@@ -68,16 +125,7 @@ def plot_alpha_diversity_boxplots_with_ggplot2(
         r_code = file.read()
 
     # Execute the R code
-    temp_file_path = r(r_code)[0]
-
-    # Read the image into Python as a PIL Image object
-    with open(temp_file_path, "rb") as f:
-        img = Image.open(io.BytesIO(f.read()))
-
-    # Clean up the temporary file
-    os.remove(temp_file_path)
-
-    return img
+    r(r_code)
 
 
 def plot_nmds_with_ggplot2(
@@ -98,6 +146,11 @@ def plot_nmds_with_ggplot2(
         stress_value (float): NMDS stress value indicating the goodness of fit.
         permanova_results (dict[str, float]): PERMANOVA results
     """
+
+    # create output directory if it does not exist
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     # Activate pandas-to-R conversion
     pandas2ri.activate()
@@ -180,6 +233,9 @@ def plot_biplot_with_ggplot2(
     Returns:
         None
     """
+
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
     # Extract primary variable from title_dict
     primary_variable = title_dict.get("primary_variable", "primary_variable")

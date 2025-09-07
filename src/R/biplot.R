@@ -1,5 +1,8 @@
 library(ggplot2)
 library(ggrepel)
+library(dplyr)
+library(tidyr)
+library(reshape2)
 
 
 # PERMANOVA results should be in the form "test_statistic,R_squared,p_value"
@@ -25,11 +28,30 @@ plot_title_stats <- paste0(
 primary_variable <- title_list[[1]]
 
 
-ord_df[[primary_variable]] <- factor(
-    ord_df[[primary_variable]],
-    levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
-)
 
+if (primary_variable=="Diagnosis") {
+
+    ord_df  <- ord_df  %>%
+        mutate(
+            !!primary_variable := factor(
+                .data[[primary_variable]],
+                levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic")
+            )
+        )
+} else if (primary_variable=="sample_location") {
+
+    ord_df  <- ord_df  %>%
+        mutate(
+            !!primary_variable := factor(
+                .data[[primary_variable]],
+                levels = c("biopsy_location_1", "biopsy_location_2", "biopsy_location_3", "biopsy_location_4", "biopsy_location_5")
+            )
+        )
+} else {
+    # Error handling for unexpected primary_variable values
+    stop(paste("Unexpected primary_variable value:", primary_variable))
+
+}
 
 # Define a colorblind-friendly palette (Okabe-Ito or similar)
 cb_palette <- c(
@@ -84,11 +106,11 @@ biplot <- ggplot(data = rpca_data, aes(x = PC1, y = PC2, color = !!sym(primary_v
         y = paste0("PC2 (", round(explained_variance[[2]] * 100, 2), "%)"),
     ) +
     geom_segment(
-        data = top_feats_taxa_df, aes(x = 0, y = 0, xend = PC1 * 1, yend = PC2 * 1),
+        data = top_feats_taxa_df, aes(x = 0, y = 0, xend = PC1 * 2, yend = PC2 * 2),
         arrow = arrow(length = unit(0.2, "cm")), color = "black"
     ) +
     geom_text_repel(
-        data = top_feats_taxa_df, aes(x = PC1 * 1, y = PC2 * 1, label = label),
+        data = top_feats_taxa_df, aes(x = PC1 * 2, y = PC2 * 2, label = label),
         color = "black", size = 3
     ) +
     scale_color_manual(values = final_colors) +

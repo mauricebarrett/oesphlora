@@ -6,6 +6,7 @@ from pathlib import Path
 import bionumpy as bnp  # type: ignore
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 
 def count_nreads_fastq(fastq_file, threads, output_file):
@@ -28,17 +29,30 @@ def count_nreads_fastq(fastq_file, threads, output_file):
         print(f"Error: The file {fastq_file} does not exist.")
         sys.exit(1)
 
+    # Get base name of the fastq file
+    sample_name = os.path.basename(fastq_file).split(".")[0]
+
+    # Remove everything after the first '_001'
+    sample_name = sample_name.split("_001")[0]
+    # Do a string replace to remove '_noprimers'
+    sample_name = sample_name.replace("_noprimers", "")
+
     # Run seqkit stats command to count reads
-    cmd = ["fqkit", "size", "--threads", str(threads), fastq_file]
+    cmd = ["fqkit", "size", "-vv", "--threads", str(threads), fastq_file]
     try:
         # Create the output directory if it doesn't exist
         Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
         # Run the command and capture the output
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
+        s = result.stdout
+        read_num = int(s.split("reads:")[1].split("\t")[0])
+
+        output = f"{sample_name}\t{read_num}\n"
+
         # Save the read count to the output file
         with open(output_file, "w") as f:
-            f.write(result.stdout)
+            f.write(output)
         print(f"Read count saved to {output_file}")
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {' '.join(cmd)}")
@@ -58,7 +72,9 @@ def gather_read_length_distribution(fastq_file, threads, output_file):
 
     # Skip if output file already exists
     if os.path.exists(output_file):
-        print(f"Output file {output_file} already exists. Skipping read count.")
+        print(
+            f"Output file {output_file} already exists. Skipping read length distribution gathering."
+        )
         return
 
     # Check if the file exists
@@ -68,7 +84,7 @@ def gather_read_length_distribution(fastq_file, threads, output_file):
 
     # Run fqkit length command to get read lengths
 
-    cmd = ["fqkit", "length", "--threads", str(threads), fastq_file]
+    cmd = ["fqkit", "length", "-vv", "--threads", str(threads), fastq_file]
     try:
         # Create the output directory if it doesn't exist
         Path(os.path.dirname(output_file)).mkdir(parents=True, exist_ok=True)
@@ -120,7 +136,7 @@ def graph_quality_scores(fastq_file, threads, output_file):
 
     # Extract 2000 reads from the fastq file
     subprocess.run(
-        f"fqkit topn -n 1000 --threads {threads} {fastq_file_str} > {subset_fastq_file}",
+        f"fqkit topn -n 1000 -vv --threads {threads} {fastq_file_str} > {subset_fastq_file}",
         shell=True,
         check=True,
     )
@@ -224,3 +240,86 @@ def fastq_qc(fastq_file, threads, out_dir):
     count_nreads_fastq(str(fastq_file), threads, str(nreads_file))
     gather_read_length_distribution(str(fastq_file), threads, str(lengthdist_file))
     graph_quality_scores(str(fastq_file), threads, str(qualplot_file))
+
+
+def plot_read_counts_primer_trimmed(
+    folder1: str,
+    folder2: str,
+    output_file: str,
+    plot_file: str,
+) -> None:
+    """Combine one-line readcount files from two folders into a single table,
+    replace missing values with 0, calculate percentage loss, and create a simple boxplot.
+
+    Each file is expected to have format:
+        <SampleID>\t<Count>with no header.
+    """
+
+    def load_folder(folder, folder_name):
+        rows = []
+        for root, _, files in os.walk(folder):
+            for file in files:
+                if file.endswith("_readcount.txt"):
+                    path = os.path.join(root, file)
+                    with open(path) as f:
+                        sample, count = f.readline().strip().split("\t")
+                        rows.append({"Sample": sample, folder_name: int(count)})
+        return pd.DataFrame(rows)
+
+    # Load each folder
+    df1 = load_folder(folder1, "Demultiplexed")
+    df2 = load_folder(folder2, "Primers_Removed")
+
+    # Outer join on Sample
+    merged = pd.merge(df1, df2, on="Sample", how="outer")
+
+    # Replace NaN with 0
+    merged = merged.fillna(0)
+
+    # Calculate percentage loss
+    merged["Percentage_Loss"] = (
+        (merged["Demultiplexed"] - merged["Primers_Removed"])
+        / merged["Demultiplexed"]
+        * 100
+    ).round(2)
+
+    # Handle division by zero (when Demultiplexed = 0)
+    merged["Percentage_Loss"] = merged["Percentage_Loss"].fillna(0)
+
+    # Save merged counts with percentage loss
+    merged.to_csv(output_file, index=False)
+
+    # Calculate summary statistics
+    mean_loss = merged["Percentage_Loss"].mean()
+    median_loss = merged["Percentage_Loss"].median()
+
+    # Create simple boxplot
+    plt.figure(figsize=(8, 6))
+
+    plt.boxplot(
+        [merged["Demultiplexed"], merged["Primers_Removed"]],
+        labels=["Demultiplexed", "Primers_Removed"],
+    )
+
+    # Add annotation with mean and median loss
+    plt.text(
+        0.02,
+        0.98,
+        f"Mean Loss: {mean_loss:.1f}%\nMedian Loss: {median_loss:.1f}%",
+        transform=plt.gca().transAxes,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+    )
+
+    plt.title("Read Count Distribution: Before vs After Primer Removal")
+    plt.ylabel("Read Counts")
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(plot_file, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    # Print summary statistics
+    print(
+        f"Primer removal - Mean loss: {mean_loss:.2f}%, Median loss: {median_loss:.2f}%"
+    )

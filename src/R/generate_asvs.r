@@ -75,7 +75,7 @@ names(rev_filt_path) <- sample_names
 # Filter and trim reads
 print("Filtering and trimming reads...")
 out <- filterAndTrim(fwd_fqs, fwd_filt_path, rev_fqs, rev_filt_path,
-  truncLen = c(260, 230), maxN = 0, maxEE = c(1, 1), truncQ = 2,
+  truncLen = c(265, 230), maxN = 0, maxEE = c(2, 4),
   rm.phix = TRUE, compress = TRUE, multithread = FALSE
 )
 
@@ -127,14 +127,16 @@ track <- cbind(
   sapply(dada_fwd, get_num),
   sapply(dada_rev, get_num),
   sapply(mergers, get_num),
-  rowSums(seqtab),
   rowSums(seqtab2),
   rowSums(seqtab_nochim)
 )
 colnames(track) <- c(
   "input", "filtered", "denoisedF",
-  "denoisedR", "merged", "seqtab", "seqtab2", "nonchim"
+  "denoisedR", "post_merged", "size_filtered", "no_chimera"
 )
+
+# In rownames, replace everything after first '_' with nothing
+rownames(track) <- gsub("_.*", "", rownames(track))
 
 print("Read tracking completed.")
 

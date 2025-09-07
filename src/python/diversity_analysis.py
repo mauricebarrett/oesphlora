@@ -1,23 +1,23 @@
 import os
 import warnings
+from itertools import combinations
+from tkinter.tix import Tree
 from typing import Optional
 
 import biom  # type: ignore
 import numpy as np
 import pandas as pd
-import unifrac
+import scipy.stats  # type: ignore
+import unifrac  # type: ignore
 from biom.table import Table  # type: ignore
 from gemelli.ctf import ctf  # type: ignore
-from gemelli.rpca import (
-    phylogenetic_rpca,
-    rpca,  # type: ignore
-)
+from gemelli.rpca import phylogenetic_rpca, rpca  # type: ignore
 from qiime2 import Artifact  # type: ignore
 from qiime2.plugins.diversity.pipelines import alpha_phylogenetic
 from qiime2.plugins.phylogeny.pipelines import align_to_tree_mafft_fasttree
 from rpy2 import robjects as r
 from rpy2.robjects import StrVector, pandas2ri, r
-from skbio import DistanceMatrix, OrdinationResults
+from skbio import DistanceMatrix, OrdinationResults, TreeNode
 from skbio.diversity import alpha, beta_diversity
 from sklearn.manifold import MDS
 
@@ -86,7 +86,7 @@ def rarefy_df(
     sampling_depth: Optional[int] = None,
     with_replacement: bool = False,
     random_seed: int = 1088,
-) -> biom.Table:
+) -> pd.DataFrame:
     """
     Rarefy a pandas DataFrame to a specified sampling depth using the BIOM format.
     This function converts a DataFrame to a BIOM table, performs rarefaction,
@@ -110,8 +110,8 @@ def rarefy_df(
 
     Returns
     -------
-    biom.Table
-        The corresponding rarefied biom.Table object.
+    pd.DataFrame
+        The rarefied DataFrame.
     """
 
     if sampling_depth is None:
@@ -140,11 +140,6 @@ def rarefy_df(
         seed=random_seed,
     )
 
-    # Convert the biom table to a QIIME2 artifact
-    rarefied_table_qza = Artifact.import_data(
-        "FeatureTable[Frequency]", rarefied_biom_table
-    )
-
     # Convert back to DataFrame for consistency
     rarefied_df = pd.DataFrame(
         rarefied_biom_table.matrix_data.toarray(),
@@ -158,7 +153,20 @@ def rarefy_df(
     )
     print(f"Sampling depth used for rarefaction: {sampling_depth}.")
 
-    return rarefied_df, rarefied_biom_table, rarefied_table_qza
+    return rarefied_df
+
+
+def convert_dataframe_to_qiime2_artifact(df: pd.DataFrame) -> Artifact:
+    """
+    Convert a pandas DataFrame to a QIIME2 Artifact of type 'FeatureTable[Frequency]'.
+    """
+    biom_table = biom.Table(
+        df.values,
+        observation_ids=df.index.astype(str),
+        sample_ids=df.columns.astype(str),
+    )
+    artifact = Artifact.import_data("FeatureTable[Frequency]", biom_table)
+    return artifact
 
 
 def calculate_phylo_alpha_diversity_qiime2(
@@ -206,18 +214,11 @@ def calculate_alpha_diversity(
         pd.DataFrame: A DataFrame containing alpha diversity metrics for each sample.
     """
 
-    # skip if the output file already exists
-    if os.path.exists(output_file):
-        print(
-            f"Output file {output_file} already exists. Skipping alpha diversity calculation."
-        )
-        return pd.read_csv(output_file)
-
     # Calculate alpha diversity metrics
     print("Calculating alpha diversity metrics...")
     alpha_diversity_metrics: dict[str, list] = {
         "sample_id": [],
-        "Observed OTUs": [],
+        "Observed Features": [],
         "Simpson's dominance index": [],
         "Simpson's diversity index": [],
     }
@@ -233,7 +234,7 @@ def calculate_alpha_diversity(
         simpson = alpha.simpson(normalized_table_df[sample])
 
         alpha_diversity_metrics["sample_id"].append(sample)
-        alpha_diversity_metrics["Observed OTUs"].append(observed_otus)
+        alpha_diversity_metrics["Observed Features"].append(observed_otus)
         alpha_diversity_metrics["Simpson's dominance index"].append(dominance)
         alpha_diversity_metrics["Simpson's diversity index"].append(simpson)
 
@@ -255,6 +256,124 @@ def calculate_alpha_diversity(
     print(f"Alpha diversity metrics saved to {output_file}")
 
     return alpha_diversity_merged_df
+
+
+def pairwise_alpha_diversity_calculations(
+    alpha_diversity_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
+    primary_variable: str,
+    output_file: str,
+) -> pd.DataFrame:
+    """Perform pairwise comparisons of alpha diversity between groups.
+
+    Args:
+        alpha_diversity_df (pd.DataFrame): DataFrame containing alpha diversity metrics.
+        metadata_df (pd.DataFrame): DataFrame containing sample metadata.
+        primary_variable (str): The column in metadata_df to group by.
+        output_file (str): Path to write out pandas dataframe as csv.
+
+    Returns:
+        pd.DataFrame: DataFrame containing pairwise comparison results.
+    """
+
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    # Initialize results list to store comparison results
+    results_list = []
+
+    # Get groups from metadata
+    groups = metadata_df[primary_variable].unique()
+
+    for g1, g2 in combinations(groups, 2):
+        print(g1, g2)
+        comparison = f"{g1}_vs_{g2}"
+
+        # Subset metadata by g1
+        meta_g1 = metadata_df[metadata_df[primary_variable] == g1]
+        meta_g2 = metadata_df[metadata_df[primary_variable] == g2]
+
+        # Find the intersection of patients_id in both groups
+        common_patients = set(meta_g1["patient_id"]).intersection(
+            set(meta_g2["patient_id"])
+        )
+
+        if not common_patients:
+            print(
+                f"No common patients found between groups {g1} and {g2}. Skipping comparison."
+            )
+            continue
+
+        # Subset metadata to only include common patients
+        meta_data_subset_df = metadata_df[
+            metadata_df["patient_id"].isin(common_patients)
+        ]
+
+        # Merge alpha diversity with subset metadata
+        merged_df = alpha_diversity_df.merge(
+            meta_data_subset_df, left_on="sample_id", right_on="sample_id"
+        )
+
+        # Perform pairwise wilcoxon test for each alpha diversity metric
+
+        for metric in [
+            "Faith's phylogenetic diversity",
+            "Observed Features",
+            "Simpson's dominance index",
+            "Simpson's diversity index",
+        ]:
+            group1_values = merged_df[merged_df[primary_variable] == g1][metric]
+            group2_values = merged_df[merged_df[primary_variable] == g2][metric]
+
+            # Perform Wilcoxon rank-sum test (Mann-Whitney U test)
+            stat, p_value = scipy.stats.mannwhitneyu(
+                group1_values, group2_values, alternative="two-sided"
+            )
+
+            # Diffenece in medians
+            median_diff = group1_values.median() - group2_values.median()
+
+            if median_diff > 0:
+                relative_change = "up in " + str(g1)
+            elif median_diff < 0:
+                relative_change = "up in " + str(g2)
+            else:
+                relative_change = "no change"
+
+            # append results to a list
+            results_list.append(
+                {
+                    "group1": g1,
+                    "group2": g2,
+                    "comparison": comparison,
+                    "metric": metric,
+                    "relative_change": relative_change,
+                    "U-statistic": stat,
+                    "p-value": p_value,
+                    "median_diff": median_diff,
+                }
+            )
+
+    # Convert results list to DataFrame
+    results_df = pd.DataFrame(results_list)
+
+    # Add a column for significance based on p-value via stars
+    results_df["significance"] = results_df["p-value"].apply(
+        lambda p: "****"
+        if p < 0.0001
+        else "***"
+        if p < 0.001
+        else "**"
+        if p < 0.01
+        else "*"
+        if p < 0.05
+        else "ns"
+    )
+
+    # Write results DataFrame to CSV
+    results_df.to_csv(output_file, index=False)
+
+    return results_df
 
 
 def perform_rpca(
@@ -280,16 +399,22 @@ def perform_rpca(
     # Preform RPCA
     ordination, robust_aitchison_dm = rpca(biom_table, min_sample_count=500)
 
-    # Write out ordination and distance matrix to files
+    # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    # Write outputs
     ordination.write(
-        output_file.replace("distance_matrix.txt", "ordination.txt"),
+        output_file.replace("distance_matrix.csv", "ordination.txt"),
         format="ordination",
     )
-    robust_aitchison_dm.write(output_file)
-    print(f"RPCA results saved to {output_file} and ordination file.")
 
-    return ordination, robust_aitchison_dm
+    # Convert distance matrix to DataFrame
+    distance_df = robust_aitchison_dm.to_data_frame()
+
+    # Write out distance DataFrame to CSV
+    distance_df.to_csv(output_file)
+
+    return ordination, distance_df
 
 
 def perform_phylo_rpca(
@@ -297,17 +422,17 @@ def perform_phylo_rpca(
     rooted_tree_newick_path: str,
     taxonomy_df: pd.DataFrame,
     output_file: str,
-) -> tuple[OrdinationResults, DistanceMatrix, Artifact, pd.DataFrame, pd.DataFrame]:
+) -> tuple[OrdinationResults, pd.DataFrame, TreeNode, pd.DataFrame, pd.DataFrame]:
     """Perform Phylogenetic RPCA on ASV table, tree, and taxonomy.
 
     Args:
         asv_table_df (pd.DataFrame): Feature table (features x samples).
         rooted_tree_newick_path (str): Path to the rooted tree in Newick format.
         taxonomy_df (pd.DataFrame): Taxonomy DataFrame (required).
-        output_file (str): Path to output distance matrix file.
+        output_file (str): Path to write out pandas dataframe as csv.
 
     Returns:
-        tuple: (OrdinationResults, DistanceMatrix)
+        tuple: ordination results, distance DataFrame, pruned tree, filtered table, filtered taxonomy.
     """
     # Convert DataFrame to BIOM Table
     biom_table = Table(
@@ -319,28 +444,43 @@ def perform_phylo_rpca(
     taxonomy_df = taxonomy_df[["Taxon", "Confidence"]]
 
     # Run Phylogenetic RPCA with taxonomy
-    ordination, distance_matrix, pruned_tree, filtered_table, filtered_taxonomy = (
-        phylogenetic_rpca(
-            table=biom_table,
-            phylogeny=rooted_tree_newick_path,
-            taxonomy=taxonomy_df,
-            min_sample_count=500,
-        )
+
+    (
+        ordination_results,
+        phylo_rclr_distance_matrix,
+        pruned_tree,
+        filtered_table,
+        filtered_taxonomy,
+    ) = phylogenetic_rpca(
+        table=biom_table,
+        phylogeny=rooted_tree_newick_path,
+        taxonomy=taxonomy_df,
+        min_sample_count=500,
     )
 
     filtered_taxonomy = reformat_taxonomy(taxonomy_df=filtered_taxonomy)
 
+    # Convert distance matrix to DataFrame
+    distance_df = phylo_rclr_distance_matrix.to_data_frame()
+
     # Write outputs
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    ordination.write(
-        output_file.replace("distance_matrix.txt", "ordination.txt"),
+
+    # Write distance DataFrame to CSV
+    distance_df.to_csv(output_file, index=False)
+
+    ordination_results.write(
+        output_file.replace("distance_matrix.csv", "ordination.txt"),
         format="ordination",
     )
-    distance_matrix.write(output_file)
 
-    print(f"Phylogenetic RPCA results saved to {output_file} and ordination file.")
-
-    return ordination, distance_matrix, pruned_tree, filtered_table, filtered_taxonomy
+    return (
+        ordination_results,
+        distance_df,
+        pruned_tree,
+        filtered_table,
+        filtered_taxonomy,
+    )
 
 
 def perform_bray_curtis(
@@ -376,36 +516,49 @@ def perform_bray_curtis(
     # Convert to data-frame
     bray_curtis_df = bray_curtis_dm.to_data_frame()
 
-    # Create output directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     # Write the Bray-Curtis distance matrix
-    bray_curtis_dm.write(output_file)
+    bray_curtis_df.to_csv(output_file)
     print(f"Bray-Curtis distance matrix saved to {output_file}")
 
     return bray_curtis_df, bray_curtis_dm
 
 
 def perform_generalized_unifrac_distance(
-    biom_table_path: str, rooted_tree_newick_path: str, alpha: float = 0.5
-) -> DistanceMatrix:
+    biom_table_path: str,
+    rooted_tree_newick_path: str,
+    output_file: str,
+    alpha: float = 0.5,
+) -> tuple[pd.DataFrame, DistanceMatrix]:
     """Calculate Unifrac distance matrix from a BIOM table and a rooted tree.
 
     Args:
         biom_table_path (str): Path to the BIOM file (must be in BIOM 2.1 format).
         rooted_tree_newick_path (str): Path to the rooted tree in Newick format.
+        output_dir (str): Directory to save the output distance matrix.
         alpha (float, optional): Generalized UniFrac alpha parameter (default 0.5).
 
     Returns:
-        DistanceMatrix: A UniFrac distance matrix between the samples.
+        tuple[pd.DataFrame, DistanceMatrix]: A DataFrame and DistanceMatrix representing the UniFrac distance matrix.
     """
 
     # Compute Generalized UniFrac distance matrix
-    unifrac_distance = unifrac.generalized(
+    unifrac_distance_matrix = unifrac.generalized(
         table=biom_table_path,
         phylogeny=rooted_tree_newick_path,
         alpha=alpha,
     )
-    return unifrac_distance
+
+    # Convert to DataFrame
+    unifrac_distance_df = unifrac_distance_matrix.to_data_frame()
+
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    # Write the UniFrac distance matrix to CSV
+    unifrac_distance_df.to_csv(output_file, index=False)
+    print(f"Generalized UniFrac distance matrix saved to {output_file}")
+
+    return unifrac_distance_df, unifrac_distance_matrix
 
 
 def perform_permanova_with_vegan(
@@ -534,7 +687,7 @@ def perform_ctf(
         observation_ids=asv_count_table_df.index.astype(str),
         sample_ids=asv_count_table_df.columns.astype(str),
     )
-    print("Performing CTF...")
+
     # Run CTF
     ordination_results, feature_ordination, distance_matrix, sample_df, feature_df = (
         ctf(

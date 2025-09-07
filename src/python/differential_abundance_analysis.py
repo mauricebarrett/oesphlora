@@ -4,8 +4,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from rpy2 import robjects
-from rpy2.robjects import pandas2ri, r
+from rpy2.robjects import pandas2ri, r  # type: ignore
 
 
 def prevalence_filtering(
@@ -24,7 +23,7 @@ def linda_daa_asv(
     primary_variable: str,
     taxonomy_table: pd.DataFrame,
     output_file: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """Run the LINDA analysis.
 
     Args:
@@ -34,18 +33,11 @@ def linda_daa_asv(
         taxonomy_table (pd.DataFrame): Table with taxonomic information.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame]: Full results and filtered significant results.
+        pd.DataFrame: Filtered significant results.
     """
 
     # Define path to filtered DAA results by replacing .csv extension with _filtered.csv
     filtered_output_file = output_file.replace(".csv", "_filtered.csv")
-
-    # Skip if the filtered results file already exists
-    if os.path.exists(filtered_output_file):
-        print(
-            f"Filtered results file {filtered_output_file} already exists. Skipping analysis."
-        )
-        return pd.read_csv(output_file), pd.read_csv(filtered_output_file)
 
     # Drop rows with missing values in the primary variable
     metadata = metadata.dropna(subset=[primary_variable])
@@ -63,6 +55,13 @@ def linda_daa_asv(
             metadata[primary_variable].isin([group_a, group_b])
         ].copy()
 
+        # order the factor levels in the metadata subset to match group_a, group_b
+        metadata_subset[primary_variable] = pd.Categorical(
+            metadata_subset[primary_variable],
+            categories=[group_a, group_b],
+            ordered=True,
+        )
+
         # Check if the subset has at least one sample for each group
         if metadata_subset[primary_variable].nunique() != 2:
             print(
@@ -71,14 +70,14 @@ def linda_daa_asv(
             continue
 
         # Subset OTU table base on metadata
-        taxon_table_fil = asv_table[metadata_subset.index]
+        asv_table_subset_df = asv_table[metadata_subset.index]
 
-        taxon_table_fil.isna().any().any()
+        asv_table_subset_df.isna().any().any()
 
         # Skip if there are fewer than 4 samples (columns) - LINDA's correlation calculations need sufficient samples
-        if taxon_table_fil.shape[1] < 4:
+        if asv_table_subset_df.shape[1] < 4:
             print(
-                f"Skipping {group_a} vs {group_b}: only {taxon_table_fil.shape[1]} samples found (minimum 4 required)"
+                f"Skipping {group_a} vs {group_b}: only {asv_table_subset_df.shape[1]} samples found (minimum 4 required)"
             )
             continue
 
@@ -88,46 +87,35 @@ def linda_daa_asv(
             pandas2ri.activate()
 
             # Convert pandas dataframes to R dataframes
-            r_species_matrix = pandas2ri.py2rpy(taxon_table_fil)
+            r_asv_table_df = pandas2ri.py2rpy(asv_table_subset_df)
             r_metadata = pandas2ri.py2rpy(metadata_subset)
 
         # Assigning converted dataframes to R's global environment
-        r.assign("r_species_matrix", r_species_matrix)
-        r.assign("r_metadata", r_metadata)
+        r.assign("asv_table_df", r_asv_table_df)
+        r.assign("metadata_df", r_metadata)
         formula = f"~ {primary_variable}"
         r.assign("formula", formula)
 
         # Retrieve the factor levels of the primary variable in R
-        levels_r = r(f"levels(as.factor(r_metadata${primary_variable}))")
+        levels_r = r(f"levels(as.factor(metadata_df${primary_variable}))")
         levels = list(levels_r)
 
         r_group_a, r_group_b = levels
 
-        # Call the LINDA function
-        r(
-            """
-            library(MicrobiomeStat)
-    
+        # Construct the path to the R script robustly
+        current_script_dir = os.path.dirname(
+            os.path.abspath(__file__)
+        )  # Absolute path of the current script
+        r_script_path = os.path.join(current_script_dir, "../R/daa_asv_linda.R")
 
-            linda_output = MicrobiomeStat::linda(
-                r_species_matrix,
-                r_metadata,
-                formula = formula,
-                feature.dat.type = 'count',
-                prev.filter = 0.10,
-                mean.abund.filter = 0,
-                max.abund.filter = 0,
-                is.winsor = TRUE,
-                adaptive = TRUE,
-                pseudo.cnt = 0.5,
-                corr.cut = 0.1,
-                n.cores = 1,
-                verbose = TRUE
-            )
+        r_script_path = os.path.abspath(r_script_path)  # Convert to an absolute path
 
-            linda_results <- as.data.frame(linda_output$output[[1]])
-            """
-        )
+        # Read the R code from the file
+        with open(r_script_path, "r") as file:
+            r_code = file.read()
+
+        # Run the R code
+        r(r_code)
 
         # Convert results to pandas dataframe - suppress warnings again
         with warnings.catch_warnings():
@@ -175,7 +163,7 @@ def linda_daa_asv(
     daa_results_taxa_fil_df.to_csv(filtered_output_file, index=False)
     print(f"Results saved to {output_file} and {filtered_output_file}")
 
-    return daa_results_taxa_df, daa_results_taxa_fil_df
+    return daa_results_taxa_fil_df
 
 
 def create_taxa_tables(
@@ -227,7 +215,7 @@ def linda_daa_taxon(
     metadata_df: pd.DataFrame,
     primary_variable: str,
     output_file: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """Run the LINDA analysis for a single categorical comparison.
 
     Args:
@@ -236,20 +224,13 @@ def linda_daa_taxon(
         primary_variable (str): The column name for the categorical variable of interest.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame]: Full results and filtered significant results.
+        pd.DataFrame: Filtered significant results.
     """
 
     print(f"Running LINDA analysis for categorical variable: '{primary_variable}'")
 
     # Define path to filtered DAA results by replacing .csv extension with _filtered.csv
     filtered_output_file = output_file.replace(".csv", "_filtered.csv")
-
-    # Skip if the filtered results file already exists
-    if os.path.exists(filtered_output_file):
-        print(
-            f"Filtered results file {filtered_output_file} already exists. Skipping analysis."
-        )
-        return pd.read_csv(output_file), pd.read_csv(filtered_output_file)
 
     # Drop rows with missing values in the primary variable
     metadata_df = metadata_df.dropna(subset=[primary_variable])
@@ -263,7 +244,7 @@ def linda_daa_taxon(
             f"Error: Expected at least 2 unique groups in '{primary_variable}', found {len(unique_groups)}."
         )
         print("Skipping analysis due to insufficient groups.")
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame()
 
     # Generate all pairwise combinations of the unique groups
     pairwise_combinations = list(itertools.combinations(unique_groups, 2))
@@ -278,6 +259,13 @@ def linda_daa_taxon(
             metadata_df[primary_variable].isin([group_a, group_b])
         ].copy()
 
+        # order the factor levels in the metadata subset to match group_a, group_b
+        metadata_subset_df[primary_variable] = pd.Categorical(
+            metadata_subset_df[primary_variable],
+            categories=[group_a, group_b],
+            ordered=True,
+        )
+
         # Check if the subset has at least one sample for each group
         if metadata_subset_df[primary_variable].nunique() != 2:
             print(
@@ -289,7 +277,7 @@ def linda_daa_taxon(
         taxon_table_fil_df = taxon_table_df[metadata_subset_df.index]
 
         # Filter on prevalence
-        taxon_table_fil_df = prevalance_filtering(taxon_table_fil_df, 10)
+        taxon_table_fil_df = prevalence_filtering(taxon_table_fil_df, 5)
 
         # Skip if there are fewer than 4 samples (columns)
         if taxon_table_fil_df.shape[1] < 4:
@@ -313,6 +301,12 @@ def linda_daa_taxon(
         formula = f"~ {primary_variable}"
         r.assign("formula", formula)
         r.assign("primary_variable", primary_variable)
+
+        # Retrieve the factor levels of the primary variable in R
+        levels_r = r(f"levels(as.factor(metadata_df${primary_variable}))")
+        levels = list(levels_r)
+
+        r_group_a, r_group_b = levels
 
         # Construct the path to the R script robustly
         current_script_dir = os.path.dirname(
@@ -342,9 +336,9 @@ def linda_daa_taxon(
             lambda log2fc: f"Up in {group_b}" if log2fc > 0 else f"Up in {group_a}"
         )
 
-        print(f"Appending results for {group_a} vs {group_b}")
+        print(f"Appending results for {r_group_a} vs {r_group_b}")
 
-        linda_results_df["comparison"] = f"{group_a} vs {group_b}"
+        linda_results_df["comparison"] = f"{r_group_a} vs {r_group_b}"
         results.append(linda_results_df)
 
     # Combine all results
@@ -371,7 +365,7 @@ def linda_daa_taxon(
     results_filtered_df.to_csv(filtered_output_file, index=False)
     print(f"Filtered results saved to {filtered_output_file}")
 
-    return results_df, results_filtered_df
+    return results_filtered_df
 
 
 def linda_daa_picrust2(
@@ -441,7 +435,7 @@ def linda_daa_picrust2(
         function_table_fil_df = function_table_df[metadata_subset_df.index]
 
         # Filter on prevalence
-        function_table_fil_df = prevalance_filtering(function_table_fil_df, 10)
+        function_table_fil_df = prevalence_filtering(function_table_fil_df, 5)
 
         # Skip if there are fewer than 4 samples (columns)
         if function_table_fil_df.shape[1] < 4:

@@ -15,7 +15,7 @@ linda_output = MicrobiomeStat::linda(
     metadata_df,
     formula = formula,
     feature.dat.type = 'count',
-    prev.filter = 0.10,
+    prev.filter = 0.05,
     mean.abund.filter = 0,
     max.abund.filter = 0,
     is.winsor = TRUE,

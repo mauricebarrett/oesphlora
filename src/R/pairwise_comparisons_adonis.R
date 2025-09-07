@@ -38,17 +38,19 @@ pairwise_permanova <- function(group1, group2, metadata, distance_matrix) {
 
 
     # Extract PERMANOVA results
-    pseudo_F <- adonis_result$`F`[1]
-    p_value <- adonis_result$`Pr(>F)`[1]
-    r_squared <- adonis_result$R2[1]
+
+    # Get the pseudo-F statistic, p-value, and R-squared and round to 4 decimal places
+    pseudo_F <- round(adonis_result$`F`[1], 4)
+    p_value <- round(adonis_result$`Pr(>F)`[1], 4)
+    r_squared <- round(adonis_result$R2[1], 4)
 
     # Perform betadisper for homogeneity of dispersion
     dispersion_result <- betadisper(subset_distance, subset_metadata[[primary_variable]])
     dispersion_test <- permutest(dispersion_result, permutations = 999)
 
     # Extract betadisper results
-    dispersion_F <- dispersion_test$tab$`F`[1]
-    dispersion_p_value <- dispersion_test$tab$`Pr(>F)`[1]
+    dispersion_F <- round(dispersion_test$tab$`F`[1], 4)
+    dispersion_p_value <- round(dispersion_test$tab$`Pr(>F)`[1], 4)
 
     # Return results
     return(data.frame(
@@ -67,8 +69,8 @@ pairwise_results <- do.call(rbind, combn(unique_groups, 2, function(pair) {
 pairwise_results <- as.data.frame(pairwise_results)
 
 # Apply multiple testing correction
-pairwise_results$p_value_adjusted <- p.adjust(pairwise_results$p_value, method = "BH")
-pairwise_results$dispersion_p_value_adjusted <- p.adjust(pairwise_results$dispersion_p_value, method = "BH")
+pairwise_results$p_value_adjusted <- round(p.adjust(pairwise_results$p_value, method = "BH"), 4)
+pairwise_results$dispersion_p_value_adjusted <- round(p.adjust(pairwise_results$dispersion_p_value, method = "BH"), 4)
 
 
 # Save results to CSV

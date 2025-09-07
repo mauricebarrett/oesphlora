@@ -54,7 +54,7 @@ def remove_primers(
             str(num_threads),
             "--discard-untrimmed",
             "--overlap",
-            "15",
+            "12",
             "--match-read-wildcards",
             "--minimum-length",
             "100",

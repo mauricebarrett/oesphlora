@@ -17,9 +17,6 @@ merged_df <- merged_df %>%
 all_groups <- levels(factor(merged_df[[primary_variable]]))
 pairwise_comparisons <- combn(all_groups, 2, simplify = FALSE)
 
-# Print to verify comparisons
-print("All pairwise comparisons:")
-print(pairwise_comparisons)
 
 # Define a colorblind-friendly palette
 cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -40,10 +37,10 @@ for (metric in metrics) {
     theme(legend.position = "none") +
     stat_compare_means(
       comparisons = pairwise_comparisons,
-      label = "p.signif", 
+      label = "p.signif",
       method = "wilcox.test", 
       p.adjust.method = NULL,
-      step.increase = 0.1
+      step.increase = 0.25,
     ) +
     theme_classic() +
     labs(title = metric, x = NULL, y = NULL) +
@@ -62,10 +59,7 @@ for (metric in metrics) {
 # Combine all plots
 combined_plot <- ggpubr::ggarrange(plotlist = plot_list, ncol = 2, nrow = 2)
 
-# Save the plot
-temp_file <- tempfile(fileext = ".png")
-png(temp_file, width = 16, height = 9, units = "in", res = 300)
+# Save the combined plot as a PDF
+pdf(output_file, width = 10, height = 8)
 print(combined_plot)
 dev.off()
-
-temp_file

@@ -46,5 +46,5 @@ You must install it separately before using reproducing analysis
 This repository was created and is maintained by:
 
 **Maurice Barrett**  
-[University College Cork]
+University College Cork
 Email: mauricepatrickbarrett@gmail

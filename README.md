@@ -12,3 +12,6 @@ Most dependencies are handled automatically by pixi.
 
 ⚠️ **Important:** Some tools are a system dependency and **cannot be installed through pixi**.  
 You must install it separately before using reproducing analysis
+
+
+### Install `fqkit`

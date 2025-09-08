@@ -32,7 +32,7 @@ pixi intall
 
 This should install all dependacies installed by 
 
-
+#### Step 2: Install all other dependacies
 
 ⚠️ **Important:** Some tools are a system dependency and **cannot be installed through pixi**.  
 You must install it separately before using reproducing analysis

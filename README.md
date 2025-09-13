@@ -44,6 +44,6 @@ You must install it separately before using reproducing analysis
 
 ## Author
 
-**Maurice Barrett**
-University College Cork
-Email: mauricepatrickbarrett@gmail.com
+**Maurice Barrett**  
+University College Cork  
+Email: mauricepatrickbarrett@gmail.com  

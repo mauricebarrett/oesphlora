@@ -39,7 +39,7 @@ DEST_DIR="/home/maurice/projects/phd/oesphlora/fastq_files/demultiplexed"
 mkdir -p "$DEST_DIR"
 
 # Loop through run directories in sorted order
-for run_dir in $(ls -d "$SOURCE_DIR"/run* 2>/dev/null | sort -V); do
+for run_dir in $(find "$SOURCE_DIR" -maxdepth 1 -type d -name "run*" | sort -V); do
     echo "Processing $run_dir"
     src_fastq_dir="$run_dir/fastq"
     if [ -d "$src_fastq_dir" ]; then

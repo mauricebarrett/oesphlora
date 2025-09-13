@@ -1,7 +1,6 @@
 import os
 import warnings
 from itertools import combinations
-from tkinter.tix import Tree
 from typing import Optional
 
 import biom  # type: ignore
@@ -13,13 +12,13 @@ from biom.table import Table  # type: ignore
 from gemelli.ctf import ctf  # type: ignore
 from gemelli.rpca import phylogenetic_rpca, rpca  # type: ignore
 from qiime2 import Artifact  # type: ignore
-from qiime2.plugins.diversity.pipelines import alpha_phylogenetic
-from qiime2.plugins.phylogeny.pipelines import align_to_tree_mafft_fasttree
-from rpy2 import robjects as r
-from rpy2.robjects import StrVector, pandas2ri, r
-from skbio import DistanceMatrix, OrdinationResults, TreeNode
-from skbio.diversity import alpha, beta_diversity
-from sklearn.manifold import MDS
+from qiime2.plugins.diversity.pipelines import alpha_phylogenetic  # type: ignore
+from qiime2.plugins.phylogeny import pipelines as phylo_pipelines  # type: ignore
+from rpy2 import robjects as r  # type: ignore
+from rpy2.robjects import pandas2ri  # type: ignore
+from skbio import DistanceMatrix, OrdinationResults, TreeNode  # type: ignore
+from skbio.diversity import alpha, beta_diversity  # type: ignore
+from sklearn.manifold import MDS  # type: ignore
 
 from python.processing import reformat_taxonomy
 
@@ -62,7 +61,7 @@ def generate_phylogenetic_tree_with_qiime2(input_fasta: str, threads, output_dir
 
     print("✅ Finished reading in sequences.")
 
-    action_results = align_to_tree_mafft_fasttree(
+    action_results = phylo_pipelines.align_to_tree_mafft_fasttree(
         sequences=rep_seq_artifact, n_threads=threads
     )
 

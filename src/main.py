@@ -7,15 +7,12 @@ from typing import List
 
 import h5py  # type: ignore
 import pandas as pd
-from biom.table import Table
+from biom.table import Table  # type: ignore
 
-from python.co_occurrence_analysis import perform_co_occurrence_network
 from python.differential_abundance_analysis import (
     create_taxa_tables,
     linda_daa_asv,
-    linda_daa_picrust2,
     linda_daa_taxon,
-    prevalence_filtering,
 )
 from python.diversity_analysis import (
     calculate_alpha_diversity,
@@ -24,17 +21,13 @@ from python.diversity_analysis import (
     pairwise_alpha_diversity_calculations,
     perform_bray_curtis,
     perform_ctf,
-    perform_generalized_unifrac_distance,
     perform_nmds,
     perform_pairwise_comparisons_permanova,
     perform_permanova_with_vegan,
-    perform_phylo_rpca,
     perform_rpca,
     rarefy_df,
 )
-from python.ml_analysis import train_xgboost_model
 from python.plotting import (
-    plot_alpha_diversity_boxplots_with_ggplot2,
     plot_biplot_with_ggplot2,
     plot_heatmap_of_alpha_diversity,
     plot_heatmap_of_daa,
@@ -516,9 +509,9 @@ def main():
         pathway_dfs[name] = df
 
     # Extract individual DataFrames
-    kegg_pathways_df = pathway_dfs["KO"]
-    enzyme_commission_df = pathway_dfs["EC"]
-    metabolic_pathways_df = pathway_dfs["MetaCyc"]
+    # kegg_pathways_df = pathway_dfs["KO"]
+    # enzyme_commission_df = pathway_dfs["EC"]
+    # metabolic_pathways_df = pathway_dfs["MetaCyc"]
 
     ###############################
     # Ecological diversity analysis

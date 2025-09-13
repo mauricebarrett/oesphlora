@@ -1,6 +1,6 @@
 library(vegan)
 
-set.seed(42)  # Set seed for reproducibility
+set.seed(42) # Set seed for reproducibility
 
 distance_matrix <- as.dist(distance_matrix)
 

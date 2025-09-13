@@ -4,7 +4,7 @@
 #
 # Description:
 #   This R script performs microbial co-occurrence network analysis using SparCC
-#   (Sparse Correlations for Compositional data) correlation estimation. It 
+#   (Sparse Correlations for Compositional data) correlation estimation. It
 #   creates correlation matrices, hierarchical clustering heatmaps, and network
 #   visualizations with community detection and hub identification.
 #
@@ -74,7 +74,7 @@ correlation_matrix_file <- file.path(output_dir, paste0(rank, "_sparcc_correlati
 # Define path to file for p-value matrix
 p_value_matrix_file <- file.path(output_dir, paste0(rank, "_sparcc_p_value_matrix_location_", location, ".csv"))
 
-#Define path to output file for heatmap plot
+# Define path to output file for heatmap plot
 heatmap_plot_file <- file.path(output_dir, paste0(rank, "_sparcc_heatmap_location_", location, ".pdf"))
 
 # Define path to output file for network plot
@@ -106,12 +106,12 @@ colnames(correlation_matrix) <- feature_names
 
 
 # Faster parameters for development/testing
-boot  <- 50        
+boot <- 50
 ncpus <- 16
 sparcc_params <- list(
-  iter = 20,       # Reduced from 50 iterations
-  inner_iter = 10, # Reduced from 20 inner iterations  
-  th = 0.1         # Keep threshold the same
+  iter = 20, # Reduced from 50 iterations
+  inner_iter = 10, # Reduced from 20 inner iterations
+  th = 0.1 # Keep threshold the same
 )
 
 print(paste0("Running SparCC bootstrap with ", boot, " iterations using ", ncpus, " cores..."))
@@ -135,7 +135,7 @@ sparccboot_result <- pval.sparccboot(sb, sided = "both")
 p_adj_vec <- p.adjust(sparccboot_result$pvals, method = "BH")
 
 # Create a matrix from the adjusted p-values
-p_value_matrix <- triu2diag(p_adj_vec, diagval = 0) 
+p_value_matrix <- triu2diag(p_adj_vec, diagval = 0)
 
 
 # Set row and column names for the p-value matrix
@@ -202,54 +202,62 @@ correlation_melted <- melt(correlation_matrix_clustered)
 names(correlation_melted) <- c("feature1", "feature2", "Correlation")
 
 # Convert factor levels to maintain clustering order
-correlation_melted$feature1 <- factor(correlation_melted$feature1, 
-                                   levels = rownames(correlation_matrix_clustered))
-correlation_melted$feature2 <- factor(correlation_melted$feature2, 
-                                   levels = colnames(correlation_matrix_clustered))
+correlation_melted$feature1 <- factor(correlation_melted$feature1,
+  levels = rownames(correlation_matrix_clustered)
+)
+correlation_melted$feature2 <- factor(correlation_melted$feature2,
+  levels = colnames(correlation_matrix_clustered)
+)
 
 # Create dendrograms as grobs
 row_dendro <- as.dendrogram(row_clust)
 col_dendro <- as.dendrogram(col_clust)
 
 # Convert dendrograms to ggplot objects
-row_dendro_plot <- ggdendrogram(rev(row_dendro), rotate = TRUE, size = 0.5) + 
-  scale_y_reverse() +  # Flip the visual direction
+row_dendro_plot <- ggdendrogram(rev(row_dendro), rotate = TRUE, size = 0.5) +
+  scale_y_reverse() + # Flip the visual direction
   theme_void() +
-  theme(plot.margin = unit(c(0,0,0,0), "cm"))
+  theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
 
 
 # NOW create the main heatmap using the properly defined correlation_melted
 heatmap_main <- ggplot(correlation_melted, aes(x = feature1, y = feature2, fill = Correlation)) +
   geom_tile() +
-  scale_fill_gradient2(low = "red", mid = "white", high = "blue", 
-                       midpoint = 0, 
-                       name = "SparCC\nCorrelation",
-                       limits = c(-1, 1)) +
+  scale_fill_gradient2(
+    low = "red", mid = "white", high = "blue",
+    midpoint = 0,
+    name = "SparCC\nCorrelation",
+    limits = c(-1, 1)
+  ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
-        axis.text.y = element_text(size = 8),
-        axis.title = element_blank(),
-        legend.title = element_text(size = 10, face = "bold"),
-        plot.margin = unit(c(0,0,0,0), "cm"))
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+    axis.text.y = element_text(size = 8),
+    axis.title = element_blank(),
+    legend.title = element_text(size = 10, face = "bold"),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
+  )
 
 
 
 
 # Alternative: More precise control with cowplot - ROW DENDROGRAM ON LEFT
 final_plot <- ggdraw() +
-  draw_plot(row_dendro_plot, x = 0, y = 0.07, width = 0.2, height = 0.75) +  # Negative y value
+  draw_plot(row_dendro_plot, x = 0, y = 0.07, width = 0.2, height = 0.75) + # Negative y value
   draw_plot(heatmap_main, x = 0.2, y = 0, width = 0.8, height = 0.9) +
   draw_label(paste0("SparCC Correlation Heatmap - ", rank, " (", location, ")"),
-             x = 0.6, y = 0.95, fontface = "bold", size = 14)
+    x = 0.6, y = 0.95, fontface = "bold", size = 14
+  )
 
 
 # Save the precisely aligned version
 save_plot(heatmap_plot_file,
-          final_plot, 
-          base_width = 16, 
-          base_height = 12)
+  final_plot,
+  base_width = 16,
+  base_height = 12
+)
 
-plot_grid(row_dendro_plot, heatmap_main, align = 'h', rel_widths = c(1, 1))
+plot_grid(row_dendro_plot, heatmap_main, align = "h", rel_widths = c(1, 1))
 
 
 ##################
@@ -279,14 +287,14 @@ vertices_in_lcc <- which(components$membership == largest_component_id)
 g_lcc <- induced_subgraph(g, vids = vertices_in_lcc)
 
 # Continue analysis with the LCC only
-g <- g_lcc  # Replace g with the LCC for all subsequent analyses
+g <- g_lcc # Replace g with the LCC for all subsequent analyses
 
 # Create new edge attributes called corr
-E(g)$corr     <- E(g)$weight
+E(g)$corr <- E(g)$weight
 # Create new edge attributes called abs_corr
 E(g)$abs_corr <- abs(E(g)$corr)
 # Replace NA values with 0
-E(g)$corr[is.na(E(g)$corr)]         <- 0
+E(g)$corr[is.na(E(g)$corr)] <- 0
 # Replace NA values with 0 in abs_corr
 E(g)$abs_corr[is.na(E(g)$abs_corr)] <- 0
 
@@ -309,7 +317,7 @@ if (max(vertex_evc_scores) > 0) {
 V(g)$eig <- vertex_evc_scores
 
 # Identify hub nodes based on 95th percentile of eigenvector centrality
-centrality_threshold <- quantile(vertex_evc_scores, 0.95)  # Top 5% as hubs
+centrality_threshold <- quantile(vertex_evc_scores, 0.95) # Top 5% as hubs
 V(g)$is_hub <- vertex_evc_scores > centrality_threshold
 
 # Keep the signed values in E(g)$corr for coloring, but use abs weights for layout algos
@@ -335,18 +343,19 @@ p1 <- ggraph(g, layout = "fr") +
   ) +
   geom_node_text(aes(label = name), repel = TRUE, size = 3, fontface = "bold") +
   theme_graph() +
-  labs(title = "Co-occurrence Network analysis of SparCC associations (Largest Connected Component)", 
-       subtitle = paste0(rank, " - ", vcount(g), " nodes, ", ecount(g), " edges")) +
+  labs(
+    title = "Co-occurrence Network analysis of SparCC associations (Largest Connected Component)",
+    subtitle = paste0(rank, " - ", vcount(g), " nodes, ", ecount(g), " edges")
+  ) +
   theme(
     plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
     plot.subtitle = element_text(size = 12, hjust = 0.5, face = "italic"),
     legend.position = "left",
     legend.title = element_text(colour = "black", size = 10, face = "bold"),
-    legend.text  = element_text(colour = "black", size = 8)
+    legend.text = element_text(colour = "black", size = 8)
   )
 
 # --- Save ---
 CairoPDF(file = network_plot_file, width = 14, height = 8)
 print(p1)
 dev.off()
-

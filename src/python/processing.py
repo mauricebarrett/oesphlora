@@ -5,8 +5,8 @@ import sys
 from typing import Optional
 
 import pandas as pd
-from qiime2 import Artifact
-from qiime2.plugins import feature_classifier
+from qiime2 import Artifact  # type: ignore
+from qiime2.plugins import feature_classifier  # type: ignore
 
 
 def remove_primers(

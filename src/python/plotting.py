@@ -1,13 +1,11 @@
-import io
 import os
 
 import numpy as np
 import pandas as pd
-from PIL import Image
-from rpy2 import robjects as r
-from rpy2.robjects import StrVector, pandas2ri, r
-from rpy2.robjects.vectors import ListVector
-from skbio import DistanceMatrix, OrdinationResults
+from rpy2 import robjects as r  # type: ignore
+from rpy2.robjects import pandas2ri  # type: ignore
+from rpy2.robjects.vectors import ListVector  # type: ignore
+from skbio import OrdinationResults  # type: ignore
 
 
 def plot_heatmap_of_alpha_diversity(

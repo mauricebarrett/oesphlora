@@ -31,7 +31,7 @@ data_df$metric <- factor(data_df$metric, levels = ordered_metrics)
 
 
 plot <- ggplot(data_df, aes(x = comparison, y = metric)) +
-  geom_tile(aes(fill = median_diff), color = "black") +  # Moved color outside aes()
+  geom_tile(aes(fill = median_diff), color = "black") + # Moved color outside aes()
   scale_fill_gradient2(
     low = "darkblue", mid = "white", high = "darkred", midpoint = 0,
     space = "Lab", na.value = "grey90", name = "Difference in Medians"
@@ -63,4 +63,3 @@ plot <- ggplot(data_df, aes(x = comparison, y = metric)) +
 pdf(output_file, width = 14, height = 7.88, useDingbats = FALSE)
 print(plot)
 dev.off()
-

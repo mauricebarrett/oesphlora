@@ -1,15 +1,14 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
+from sklearn.metrics import (  # type: ignore
     accuracy_score,
     average_precision_score,
     f1_score,
     roc_auc_score,
 )
-from sklearn.model_selection import (
+from sklearn.model_selection import (  # type: ignore
     RandomizedSearchCV,  # Import from sklearn, not xgboost
     StratifiedKFold,
-    cross_validate,
     train_test_split,
 )
 from xgboost import XGBClassifier

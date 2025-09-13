@@ -1,9 +1,8 @@
 import os
 
 import pandas as pd
-from rpy2 import robjects as ro
-from rpy2.robjects import Environment, pandas2ri, r
-from rpy2.robjects.vectors import ListVector
+from rpy2.robjects import pandas2ri, r  # type: ignore
+from rpy2.robjects.vectors import ListVector  # type: ignore
 
 
 def prevalance_filtering(

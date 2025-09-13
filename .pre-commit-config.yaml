@@ -1,0 +1,78 @@
+repos:
+  # --- General hygiene checks (basic file sanity) ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace       # removes trailing whitespace
+        stages: [pre-commit]
+      - id: end-of-file-fixer         # ensures files end with a newline
+        stages: [pre-commit]
+      - id: check-yaml                # validates YAML syntax
+        stages: [pre-commit]
+      - id: check-added-large-files   # prevents accidentally committing huge files
+        stages: [pre-commit]
+
+  # --- Python linting & formatting (ruff: linter + formatter) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff-check
+        args: [--fix]                 # auto-fix linting issues
+        name: ruff check
+        stages: [pre-commit]
+        types: [python]
+      - id: ruff-format
+        name: ruff format             # enforce consistent Python formatting
+        stages: [pre-commit]
+        types: [python]
+
+  # --- Commit message enforcement (Commitizen: conventional commits) ---
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.9.0
+    hooks:
+      - id: commitizen
+        name: commitizen check        # enforces commit message conventions
+        stages: [commit-msg]
+        args: [--allow-abort, --commit-msg-file]
+
+  # --- Python type checking (mypy) ---
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.1
+    hooks:
+      - id: mypy
+        name: mypy (python)           # static type checks for Python
+        entry: mypy
+        types: [python]
+        stages: [pre-push]            # runs on push, not on every commit
+        language: system              # use Pixi/system Python environment
+
+  # --- R code quality (styler + lintr) ---
+  - repo: https://github.com/lorenzwalthert/precommit
+    rev: v0.4.3
+    hooks:
+      - id: style-files
+        name: styler (R)              # auto-format R code to tidyverse style
+        stages: [pre-commit]
+      - id: lintr
+        name: lintr (R)               # lint R code for style & errors
+        stages: [manual]               # run lintr manually due to performance
+  # --- Shell script style checks (bashate: OpenStack style guide) ---
+  - repo: https://github.com/openstack/bashate.git
+    rev: '2.1.1'
+    hooks:
+      - id: bashate
+        files: \.sh$
+        name: bashate (bash)          # checks shell scripts for style issues
+        entry: bashate
+        types: [shell]
+        stages: [pre-commit]
+
+  # --- Shell script static analysis (shellcheck: common pitfalls) ---
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        name: shellcheck (bash)       # finds bugs/pitfalls in shell scripts
+        entry: shellcheck
+        types: [shell]
+        stages: [pre-commit]

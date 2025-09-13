@@ -1,7 +1,17 @@
-#Set up GTDB classifier
+#!/bin/bash
+# Set up GTDB classifier
 
-wget https://data.ace.uq.edu.au/public/gtdb/data/releases/release226/226.0/genomic_files_all/ssu_all_r226.fna.gz
-unzip ssu_all_r226.fna.gz
+set -e  # Exit on any error
+
+# Download GTDB SSU sequences if not already present
+if [ ! -f "ssu_all_r226.fna.gz" ]; then
+    wget https://data.ace.uq.edu.au/public/gtdb/data/releases/release226/226.0/genomic_files_all/ssu_all_r226.fna.gz
+fi
+
+# Extract the gzipped file
+if [ ! -f "ssu_all_r226.fna" ]; then
+    gunzip -k ssu_all_r226.fna.gz
+fi
 
 grep -E '^>' ssu_all_r226.fna | tr -d '>' | sed 's/ d__/\td__/' | sed 's/\[.*//' >ssu_all_r226_taxonomy.tsv
 

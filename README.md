@@ -18,23 +18,23 @@ The easiest way is to use the prebuilt Docker image, which will contain required
 
 ### Option 2: Native installation
 
-This project uses [pixi](https://pixi.sh) for environment management.  
+This project uses [pixi](https://pixi.sh) for environment management.
 Most dependencies are handled automatically by pixi.
 
 #### Step 1: Install pixi maneged dependacies
 Follow the instuctions in the link to install pixi [pixi installation guide](https://pixi.sh/latest/#installation)
 
-Once pixi is install one may enter the 
+Once pixi is install one may enter the
 
 ```bash
 pixi intall
 ```
 
-This should install all dependacies installed by 
+This should install all dependacies installed by
 
 #### Step 2: Install all other dependacies
 
-⚠️ **Important:** Some tools are a system dependency and **cannot be installed through pixi**.  
+⚠️ **Important:** Some tools are a system dependency and **cannot be installed through pixi**.
 You must install it separately before using reproducing analysis
 
 
@@ -44,7 +44,6 @@ You must install it separately before using reproducing analysis
 
 ## Author
 
-**Maurice Barrett**  
-University College Cork  
+**Maurice Barrett**
+University College Cork
 Email: mauricepatrickbarrett@gmail.com
-

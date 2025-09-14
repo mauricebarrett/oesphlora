@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/mauricebarrett/oesphlora/compare/v1.0.0...v1.1.0) (2025-09-14)
+
+
+### Features
+
+* added jaccard and unweighted unifrac calculations ([2f0ba6d](https://github.com/mauricebarrett/oesphlora/commit/2f0ba6d6188342a9895422e237a7f993b1e81366))
+
 # 1.0.0 (2025-09-14)
 
 

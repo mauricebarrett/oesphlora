@@ -33,3 +33,26 @@ jobs:
         # 1. Python tests (pytest)
         # 2. R tests (testthat)
         # 3. Shell tests (bash)
+  commitizen-check:
+    runs-on: ubuntu-latest
+    name: Commitizen check for all commits
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required to get the full commit history
+
+      - name: Install pixi
+        run: |
+          curl -fsSL https://pixi.sh/install.sh | bash
+          echo "$HOME/.pixi/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: pixi install
+
+      - name: Check commit messages with Commitizen
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          pixi run cz check --rev-range $BASE..$HEAD

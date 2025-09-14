@@ -289,17 +289,35 @@ def main():
         print("Finished removing primers from demultiplexed FASTQ files.")
 
     # Perform quality control on primer trimmed FASTQ files
-    for fastq_file in Path(primer_trimmed_dir).glob("*.fastq.gz"):
-        base_name = fastq_file.name.replace(".fastq.gz", "")
+    primer_trimmed_qc_dir = os.path.join(wor_dir, "qc", "primers_removed")
 
-        print(f"Processing primer trimmed file: {base_name}")
+    # Check if primer trimmed QC directory exists and has files
+    if os.path.exists(primer_trimmed_qc_dir):
+        existing_qc_files = list(Path(primer_trimmed_qc_dir).glob("*"))
+        if existing_qc_files:
+            print(
+                f"Primer trimmed QC directory already contains {len(existing_qc_files)} files. Skipping primer trimmed QC."
+            )
+        else:
+            print(
+                "Primer trimmed QC directory exists but is empty. Running primer trimmed QC..."
+            )
+            for fastq_file in Path(primer_trimmed_dir).glob("*.fastq.gz"):
+                base_name = fastq_file.name.replace(".fastq.gz", "")
+                print(f"Processing primer trimmed file: {base_name}")
+                out_dir = os.path.join(wor_dir, "qc", "primers_removed", base_name)
+                fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
+            print("Finished quality control for primer trimmed FASTQ files.")
+    else:
+        print("Primer trimmed QC directory doesn't exist. Running primer trimmed QC...")
+        for fastq_file in Path(primer_trimmed_dir).glob("*.fastq.gz"):
+            base_name = fastq_file.name.replace(".fastq.gz", "")
+            print(f"Processing primer trimmed file: {base_name}")
+            out_dir = os.path.join(wor_dir, "qc", "primers_removed", base_name)
+            fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
+        print("Finished quality control for primer trimmed FASTQ files.")
 
-        # Define output directory for QC results
-        out_dir = os.path.join(wor_dir, "qc", "primers_removed", base_name)
-
-        fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
-    print("Finished quality control for primer trimmed FASTQ files.")
-
+    # Plot read counts before and after primer trimming
     plot_read_counts_primer_trimmed(
         folder1=os.path.join(wor_dir, "qc", "demultiplexed"),
         folder2=os.path.join(wor_dir, "qc", "primers_removed"),

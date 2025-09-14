@@ -9,6 +9,15 @@ import h5py  # type: ignore
 import pandas as pd
 from biom.table import Table  # type: ignore
 
+from python.beta_diversity_analysis import (
+    calculate_bray_curtis_distance,
+    calculate_jaccard_distance,
+    calculate_unweighted_unifrac_distance,
+    perform_pairwise_comparisons_permanova,
+    perform_permanova_with_vegan,
+    perform_phylogenetic_rpca,
+    perform_rpca,
+)
 from python.differential_abundance_analysis import (
     create_taxa_tables,
     linda_daa_asv,
@@ -19,12 +28,8 @@ from python.diversity_analysis import (
     convert_dataframe_to_qiime2_artifact,
     generate_phylogenetic_tree_with_qiime2,
     pairwise_alpha_diversity_calculations,
-    perform_bray_curtis,
     perform_ctf,
     perform_nmds,
-    perform_pairwise_comparisons_permanova,
-    perform_permanova_with_vegan,
-    perform_rpca,
     rarefy_df,
 )
 from python.plotting import (
@@ -624,9 +629,22 @@ def main():
     #######################################################################
     #######################################################################
 
+    #######################################################################
+    #######################################################################
+    # 3.1 All samples together analysis
+    #######################################################################
+    #######################################################################
+
+    ######################################################################
+    # 3.1.1 Beta diversity analysis of all samples together
+    #######################################################
+
     # Define beta diversity directory
     beta_div_dir = os.path.join(div_met_dir, "beta_diversity")
 
+    #########################
+    # 3.1.1.1 CTF analysis
+    #########################
     # Define dir to output directory for CTF results
     ctf_output_dir = os.path.join(beta_div_dir, "ctf")
 
@@ -687,13 +705,18 @@ def main():
         )
         print(f"CTF biplot saved to {ctf_biplot_output_file}")
 
-    ################################
-    # Split data by sample Diagnosis
-    ################################
+    ##########################################################
+    ##########################################################
+    # 3.2 Comparative analysis between locations per diagnosis
+    ##########################################################
+    ##########################################################
 
     diagnoses = merged_df["Diagnosis"].unique()
 
     for diagnosis in diagnoses:
+        ########################################################################
+        # 3.2.1 Generate diagnosis specific ASV table in pandas and BIOM format
+        ########################################################################
         print(f"Processing diagnosis: {diagnosis}")
 
         # Filter the merged DataFrame for the current diagnosis
@@ -722,7 +745,7 @@ def main():
         print(f"BIOM file saved to {biom_file_path}")
 
         ############################################################
-        # Alpha diversity difference between locations per diagnosis
+        # 3.2.2 Alpha diversity between locations per diagnosis
         ############################################################
 
         # Path to alpha divesity figures directory
@@ -771,30 +794,96 @@ def main():
         # Save the figure
         print(f"Alpha diversity figure saved to {alpha_diversity_figure_file}")
 
-        #########################
-        # 2.1 Beta Diversity
-        #########################
+        ######################################################
+        # 3.2.3 Beta diversity between locations per diagnosis
+        #######################################################
 
-        # Path to Bray-Curtis directory
-        bray_curtis_dir = os.path.join(beta_div_dir, "bray_curtis")
+        # Path to directory to output beta diversity results locations per diagnosis
+        beta_div_location_dir = os.path.join(beta_div_dir, "location")
 
-        # Path to directory to results of Bray-Curtis comparing locations per diagnosis
-        bray_curtis_location_dir = os.path.join(bray_curtis_dir, "location")
-
-        # Path to beta diversity figures directory
-        beta_fig_dir = os.path.join(fig_dir, "beta_diversity")
-
-        # Path to beta diversity figures comparing locations per diagnosis
+        # Path to directory to figures of beta diversity results locations per diagnosis
         beta_fig_location_dir = os.path.join(beta_fig_dir, "location")
 
-        # Path to Bray-Curtis figures comparing locations per diagnosis
-        beta_fig_location_bray_curtis_dir = os.path.join(
+        ################################
+        # 3.2.3.1 Jaccard
+        ################################
+
+        # Path to Jaccard directory
+        jaccard_dir = os.path.join(beta_div_location_dir, "jaccard")
+
+        # Path to figures directory for Jaccard results comparing locations per diagnosis
+        jaccard_fig_location_dir = os.path.join(beta_fig_location_dir, "jaccard")
+
+        # Path to Jaccard distance matrix comparing locations per diagnosis
+        jaccard_distance_matrix_file = os.path.join(
+            jaccard_dir, f"jaccard_distance_matrix_diagnosis_{diagnosis}.csv"
+        )
+
+        # Calculate Jaccard distance
+        jaccard_df, jaccard_dm = calculate_jaccard_distance(
+            rarefied_table_df=rarefied_df,
+            output_file=jaccard_distance_matrix_file,
+        )
+
+        # Perform pairwise comparisons with vegan on the Jaccard distance matrix
+        perform_pairwise_comparisons_permanova(
+            metadata=diagnosis_df,
+            distance_df=jaccard_df,
+            primary_variable="sample_location",
+            output_file=os.path.join(
+                jaccard_dir,
+                f"jaccard_pairwise_comparisons_diagnosis_{diagnosis}.csv",
+            ),
+        )
+
+        # Perform permanova  with vegan on the Jaccard distance matrix
+        permanova_results_dict = perform_permanova_with_vegan(
+            metadata=diagnosis_df,
+            distance_df=jaccard_df,
+            primary_variable="sample_location",
+        )
+
+        # Perform NMDS on the Jaccard distance matrix
+        coordinates_df, normalized_stress = perform_nmds(distance_matrix=jaccard_dm)
+
+        # Path to NMDS plot file comparing locations per diagnosis
+        nmds_plot_file_path = os.path.join(
+            jaccard_fig_location_dir,
+            f"jaccard_nmds_plot_diagnosis_{diagnosis}.pdf",
+        )
+
+        # Define a title dictionary for the NMDS plot
+        title_dict = {
+            "primary_variable": "sample_location",
+            "title": f"NMDS Plot of Jaccard distances for {diagnosis} Patients",
+            "stress": normalized_stress,
+        }
+
+        plot_nmds_with_ggplot2(
+            nmds_coordinates=coordinates_df,
+            metadata=diagnosis_df,
+            permanova_results=permanova_results_dict,
+            title_dict=title_dict,
+            output_file=nmds_plot_file_path,
+        )
+
+        print(f"NMDS plot saved to {nmds_plot_file_path}")
+
+        ########################
+        # 3.2.3.2 Bray-Curtis
+        ########################
+
+        # Path to Bray-Curtis directory
+        bray_curtis_location_dir = os.path.join(beta_div_location_dir, "bray_curtis")
+
+        # Path to figures directory for Bray-Curtis results comparing locations per diagnosis
+        bray_curtis_fig_location_dir = os.path.join(
             beta_fig_location_dir, "bray_curtis"
         )
 
         # Path to NMDS plot file comparing locations per diagnosis
         nmds_plot_file_path = os.path.join(
-            beta_fig_location_bray_curtis_dir,
+            bray_curtis_fig_location_dir,
             f"bray_curtis_nmds_plot_diagnosis_{diagnosis}.pdf",
         )
 
@@ -805,7 +894,7 @@ def main():
         )
 
         # Perform Bray-Curtis distance calculation
-        bray_curtis_df, bray_curtis_dm = perform_bray_curtis(
+        bray_curtis_df, bray_curtis_dm = calculate_bray_curtis_distance(
             rarefied_table_df=rarefied_df,
             output_file=bray_curtis_distance_matrix_file,
         )
@@ -834,27 +923,32 @@ def main():
         title_dict = {
             "primary_variable": "sample_location",
             "title": f"NMDS Plot of Bray-Curtis distances for {diagnosis} Patients",
+            "stress": normalized_stress,
         }
 
         plot_nmds_with_ggplot2(
             nmds_coordinates=coordinates_df,
             metadata=diagnosis_df,
             title_dict=title_dict,
-            stress_value=normalized_stress,
             permanova_results=results_dict,
             output_file=nmds_plot_file_path,
         )
         print(f"NMDS plot saved to {nmds_plot_file_path}")
 
-        ########################
-        # Robust Aitchison PCA
-        ########################
+        ###############################
+        # 3.2.3.3 Robust Aitchison PCA
+        ###############################
 
-        # Define RPCA directory
-        rpca_dir = os.path.join(beta_div_dir, "rpca")
+        # Path to Bray-Curtis directory
+        rpca_location_dir = os.path.join(beta_div_location_dir, "rpca")
 
-        # Path to directory to results of Robust Aitchison PCA comparing locations per diagnosis
-        rpca_location_dir = os.path.join(rpca_dir, "location")
+        # Path to figures directory for RPCA results comparing locations per diagnosis
+        rpca_fig_location_dir = os.path.join(beta_fig_location_dir, "rpca")
+
+        # Path to RPCA biplot file comparing locations per diagnosis
+        rpca_biplot_file = os.path.join(
+            rpca_fig_location_dir, f"rpca_biplot_diagnosis_{diagnosis}.pdf"
+        )
 
         # Path to RPCA distance matrix comparing locations per diagnosis
         rpca_distance_matrix_file = os.path.join(
@@ -885,16 +979,6 @@ def main():
             primary_variable="sample_location",
         )
 
-        # Path to RPCA figures comparing locations per diagnosis
-        beta_fig_location_rpca_dir = os.path.join(
-            beta_fig_location_dir, "robust_aitchison_pca"
-        )
-
-        # Path to RPCA biplot comparing locations per diagnosis
-        rpca_biplot_file = os.path.join(
-            beta_fig_location_rpca_dir, f"rpca_biplot_diagnosis_{diagnosis}.pdf"
-        )
-
         # Create dict for title and primary variable
         title_dict = {
             "primary_variable": "sample_location",
@@ -911,6 +995,119 @@ def main():
             output_file=rpca_biplot_file,
         )
         print(f"RPCA biplot saved to {rpca_biplot_file}")
+
+        ############################################
+        # 3.2.3.4  Phylogenetic robust Aitchison PCA
+        ############################################
+
+        # Path to Phylogenetic RPCA directory
+        phylo_rpca_location_dir = os.path.join(beta_div_location_dir, "phylo_rpca")
+
+        # Path to figures directory for Phylogenetic RPCA results comparing locations per diagnosis
+        phylo_rpca_fig_location_dir = os.path.join(beta_fig_location_dir, "phylo_rpca")
+
+        # Path to Phylogenetic RPCA biplot file comparing locations per diagnosis
+        phylo_rpca_biplot_file = os.path.join(
+            phylo_rpca_fig_location_dir,
+            f"phylo_rpca_biplot_diagnosis_{diagnosis}.pdf",
+        )
+
+        # Path to Phylogenetic RPCA distance matrix comparing locations per diagnosis
+        phylo_rpca_distance_matrix_file = os.path.join(
+            phylo_rpca_location_dir,
+            f"phylo_rpca_diagnosis_{diagnosis}_distance_matrix.csv",
+        )
+
+        # Perform Phylogenetic RPCA
+
+        (
+            phylo_rpca_ordination,
+            phylo_rpca_distance_df,
+            pruned_tree,
+            filtered_table,
+            filtered_taxonomy,
+        ) = perform_phylogenetic_rpca(
+            asv_table_df=asv_table_diagnosis,
+            taxonomy_df=taxonomy_df,
+            rooted_tree_newick_path=rooted_tree_newick_path,
+            output_file=phylo_rpca_distance_matrix_file,
+        )
+
+        # Perform pairwise comparisons with vegan on the Phylogenetic RPCA distance matrix
+        perform_pairwise_comparisons_permanova(
+            metadata=diagnosis_df,
+            distance_df=phylo_rpca_distance_df,
+            primary_variable="sample_location",
+            output_file=os.path.join(
+                phylo_rpca_location_dir,
+                f"phylo_rpca_pairwise_comparisons_diagnosis_{diagnosis}.csv",
+            ),
+        )
+
+        # Perform permanova  with vegan on the Phylogenetic RPCA distance matrix
+        permanova_results = perform_permanova_with_vegan(
+            metadata=diagnosis_df,
+            distance_df=phylo_rpca_distance_df,
+            primary_variable="sample_location",
+        )
+
+        # Create dict for title and primary variable
+        title_dict = {
+            "primary_variable": "sample_location",
+            "title": f"Phylogenetic RPCA Biplot of Locations for {diagnosis} Patients",
+        }
+
+        # Plot Phylogenetic RPCA biplot
+        plot_biplot_with_ggplot2(
+            ordination_results=phylo_rpca_ordination,
+            metadata=diagnosis_df,
+            permanova_results=permanova_results,
+            taxonomy_table=taxonomy_df,
+            title_dict=title_dict,
+            output_file=phylo_rpca_biplot_file,
+        )
+
+        print(f"Phylogenetic RPCA biplot saved to {phylo_rpca_biplot_file}")
+
+    ##############################
+    # 3.2.3.4  Unweighted UniFrac
+    ##############################
+
+    # Path to Unweighted UniFrac directory
+    unweighted_unifrac_location_dir = os.path.join(
+        beta_div_location_dir, "unweighted_unifrac"
+    )
+
+    # Path to figures directory for Unweighted UniFrac results comparing locations per diagnosis
+    unweighted_unifrac_fig_location_dir = os.path.join(
+        beta_fig_location_dir, "unweighted_unifrac"
+    )
+
+    # Path to NMDS plot file comparing locations per diagnosis
+    nmds_plot_file_path = os.path.join(
+        unweighted_unifrac_fig_location_dir,
+        f"unweighted_unifrac_nmds_plot_diagnosis_{diagnosis}.pdf",
+    )
+
+    # Path to Unweighted UniFrac distance matrix comparing locations per diagnosis
+    unweighted_unifrac_distance_matrix_file = os.path.join(
+        unweighted_unifrac_location_dir,
+        f"unweighted_unifrac_distance_matrix_diagnosis_{diagnosis}.csv",
+    )
+
+    # Calculate Unweighted UniFrac distance
+    unweighted_unifrac_df, unweighted_unifrac_dm = (
+        calculate_unweighted_unifrac_distance(
+            biom_table_path=biom_file_path,
+            rooted_tree_newick_path=rooted_tree_newick_path,
+            output_file=unweighted_unifrac_distance_matrix_file,
+        )
+    )
+
+    # Perform NMDS
+    coordinates_df, normalized_stress = perform_nmds(
+        distance_matrix=unweighted_unifrac_dm
+    )
 
     #############################################################################################################
     ################################ Split data by sample location ##############################################
@@ -1012,45 +1209,43 @@ def main():
                 bray_curtis_diagnosis_dir, f"bray_curtis_distance_matrix_{location}.csv"
             )
 
-            # Perform Bray-Curtis distance calculation
-            bray_curtis_df, bray_curtis_dm = perform_bray_curtis(
-                rarefied_table_df=rarefied_df, output_file=bray_curtis_dist_file
-            )
+        # Perform Bray-Curtis distance calculation
+        bray_curtis_df, bray_curtis_dm = calculate_bray_curtis_distance(
+            rarefied_table_df=rarefied_df, output_file=bray_curtis_dist_file
+        )
 
-            results_dict = perform_permanova_with_vegan(
-                metadata=location_df,
-                distance_df=bray_curtis_df,
-                primary_variable="Diagnosis",
-            )
+        results_dict = perform_permanova_with_vegan(
+            metadata=location_df,
+            distance_df=bray_curtis_df,
+            primary_variable="Diagnosis",
+        )
 
-            # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
-            perform_pairwise_comparisons_permanova(
-                metadata=location_df,
-                distance_df=bray_curtis_df,
-                primary_variable="Diagnosis",
-                output_file=bray_curtis_dist_file,
-            )
+        # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
+        perform_pairwise_comparisons_permanova(
+            metadata=location_df,
+            distance_df=bray_curtis_df,
+            primary_variable="Diagnosis",
+            output_file=bray_curtis_dist_file,
+        )
 
-            # Perform NMDS on the Bray-Curtis distance matrix
-            coordinates_df, normalized_stress = perform_nmds(
-                distance_matrix=bray_curtis_dm
-            )
+        # Perform NMDS on the Bray-Curtis distance matrix
+        coordinates_df, normalized_stress = perform_nmds(distance_matrix=bray_curtis_dm)
 
-            # Define a title dictionary for the NMDS plot
-            title_dict = {
-                "primary_variable": "Diagnosis",
-                "title": f"NMDS Plot of Bray-Curtis distances for location {location}",
-            }
+        # Define a title dictionary for the NMDS plot
+        title_dict = {
+            "primary_variable": "Diagnosis",
+            "title": f"NMDS Plot of Bray-Curtis distances for location {location}",
+        }
 
-            plot_nmds_with_ggplot2(
-                nmds_coordinates=coordinates_df,
-                metadata=location_df,
-                title_dict=title_dict,
-                stress_value=normalized_stress,
-                permanova_results=results_dict,
-                output_file=nmds_plot_file_path,
-            )
-            print(f"NMDS plot saved to {nmds_plot_file_path}")
+        plot_nmds_with_ggplot2(
+            nmds_coordinates=coordinates_df,
+            metadata=location_df,
+            title_dict=title_dict,
+            stress_value=normalized_stress,
+            permanova_results=results_dict,
+            output_file=nmds_plot_file_path,
+        )
+        print(f"NMDS plot saved to {nmds_plot_file_path}")
 
         ######################
         # Robust Aitchison PCA

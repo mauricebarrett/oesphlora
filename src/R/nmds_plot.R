@@ -14,20 +14,19 @@ permanova_results <- list(
 
 
 
-
-# Pull out title
+# Pull out title components
+primary_variable <- title_list[[1]]
 plot_title_names <- title_list[[2]]
+stress_value <- as.numeric(title_list[[3]])
 
 
 # Prepare the title with stress value and PERMANOVA results
 plot_title_stats <- paste0(
-  "Stress: ", round(stress_value, 6), ", ",
+  "Stress: ", round(stress_value, 4), ", ",
   "PERMANOVA pseudo-F: ", round(permanova_results[["test statistic"]], 6), ", ",
   "R²: ", round(permanova_results[["R²"]], 6), ", ",
   "p-value: ", round(permanova_results[["p-value"]], 4)
 )
-
-
 
 
 # Add row names as a column manually for both data frames
@@ -38,7 +37,7 @@ metadata$SampleID <- rownames(metadata)
 nmds_data <- merge(nmds_coordinates_df, metadata, by = "SampleID")
 
 
-primary_variable <- title_list[[1]]
+
 
 
 if (primary_variable == "Diagnosis") {

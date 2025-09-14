@@ -2,8 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
-from rpy2 import robjects as r  # type: ignore
-from rpy2.robjects import pandas2ri  # type: ignore
+from rpy2.robjects import pandas2ri, r  # type: ignore
 from rpy2.robjects.vectors import ListVector  # type: ignore
 from skbio import OrdinationResults  # type: ignore
 
@@ -130,7 +129,6 @@ def plot_nmds_with_ggplot2(
     nmds_coordinates: pd.DataFrame,
     metadata: pd.DataFrame,
     title_dict: dict[str, str],
-    stress_value: float,
     permanova_results: dict[str, float],
     output_file: str,
 ) -> None:
@@ -165,7 +163,6 @@ def plot_nmds_with_ggplot2(
     r.assign("nmds_coordinates_df", r_nmds_coordinates)
     r.assign("metadata_df", r_metadata)
     r.assign("title_list", r_title_dict)
-    r.assign("stress_value", stress_value)
     r.assign("permanova_results", r_permanova_results)
     r.assign("output_file", output_file)
 

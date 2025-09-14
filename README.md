@@ -1,6 +1,6 @@
 # oesphlora
 ![CI](https://github.com/mauricebarrett/oesphlora/actions/workflows/ci.yml/badge.svg?branch=main)
-[![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
+![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-Angular-brightgreen.svg)
 
 ## Overview
 This repository contains code and analysis scripts accompanying the manuscript entitled:

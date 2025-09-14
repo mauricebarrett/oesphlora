@@ -53,6 +53,10 @@ jobs:
 
       - name: Check commit messages with Commitizen
         run: |
-          BASE=${{ github.event.pull_request.base.sha }}
-          HEAD=${{ github.event.pull_request.head.sha }}
-          pixi run cz check --rev-range $BASE..$HEAD
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=${{ github.event.pull_request.base.sha }}
+            HEAD=${{ github.event.pull_request.head.sha }}
+            pixi run cz check --rev-range $BASE..$HEAD
+          else
+            pixi run cz check --rev-range ${{ github.sha }}~10..${{ github.sha }}
+          fi

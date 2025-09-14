@@ -1,5 +1,5 @@
 # oesphlora
-![CI](https://github.com/maurice/oesphlora/actions/workflows/ci.yml/badge.svg?branch=main)
+![CI](https://github.com/mauricebarrett/oesphlora/actions/workflows/ci.yml/badge.svg?branch=main)
 
 ## Overview
 This repository contains code and analysis scripts accompanying the manuscript entitled:

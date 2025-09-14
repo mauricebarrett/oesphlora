@@ -4,8 +4,22 @@ name = "oesphlora"
 platforms = ["linux-64"]
 version = "0.1.0"
 
-[tasks]
+[tasks.test-python]
+cmd = "pytest -q"
 
+[tasks.test-r]
+cmd = "Rscript -e 'testthat::test_dir(\"tests\")'"
+
+[tasks.test-shell]
+cmd = "bash tests/test_example.sh"
+
+[tasks.test]
+# Master test task: runs all subtasks in sequence
+cmd = """
+pixi run test-python &&
+pixi run test-r &&
+pixi run test-shell
+"""
 [dependencies]
 _libgcc_mutex = "0.1.*"
 _openmp_mutex = "4.5.*"
@@ -770,6 +784,7 @@ r-lintr = ">=3.2.0,<4"
 r-languageserver = ">=0.3.16,<0.4"
 r-precommit = ">=0.4.3,<0.5"
 commitizen = ">=4.8.4,<5"
+r-testthat = ">=3.2.3,<4"
 
 [pypi-dependencies]
 bionumpy = "==1.0.13"

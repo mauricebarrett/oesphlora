@@ -11,6 +11,7 @@ repos:
         stages: [pre-commit]
       - id: check-added-large-files   # prevents accidentally committing huge files
         stages: [pre-commit]
+    exclude: '(^README\.Rmd$|^README\.md$)'
 
   # --- Python linting & formatting (ruff: linter + formatter) ---
   - repo: https://github.com/astral-sh/ruff-pre-commit

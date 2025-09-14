@@ -91,8 +91,15 @@ rpca_data <- merge(ord_df, centroids,
 
 
 # Use ggplot2 to create the biplot
-biplot <- ggplot(data = rpca_data, aes(x = PC1, y = PC2, color = !!sym(primary_variable))) +
-  geom_point(aes(fill = !!sym(primary_variable), shape = !!sym(primary_variable)),
+biplot <- ggplot(
+  data = rpca_data,
+  aes(x = PC1, y = PC2, color = !!sym(primary_variable))
+) +
+  geom_point(
+    aes(
+      fill = !!sym(primary_variable),
+      shape = !!sym(primary_variable)
+    ),
     size = 3, stroke = 1.2
   ) +
   # Add ellipses by primary variable

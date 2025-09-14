@@ -1,4 +1,6 @@
 # oesphlora
+![CI](https://github.com/maurice/oesphlora/actions/workflows/ci.yml/badge.svg?branch=main)
+
 ## Overview
 This repository contains code and analysis scripts accompanying the manuscript entitled:
 "Alterations in the oesophago-gastric mucosal microbiome in patients along the inflammation-metaplasia-dysplasia-oesophageal adenocarcinoma sequence"

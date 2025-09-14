@@ -241,6 +241,24 @@ def main():
     # Define directory  with demultiplexed FASTQ files
     demux_dir = os.path.join(wor_dir, "fastq_files", "demultiplexed")
 
+    ###############################################################################
+    ###############################################################################
+    ###############################################################################
+    # 1 Raw data processing and data generation
+    ################################################################################
+    ################################################################################
+    ################################################################################
+
+    #################################
+    #################################
+    # 1.1 Primer removal and QC
+    #################################
+    #################################
+
+    ####################################################
+    # 1.1.1 Quality control on demultiplexed FASTQ files
+    ####################################################
+
     # Loop through each fastq file in the demux_dir and gather qc with count_nreads_fastq
     for fastq_file in Path(demux_dir).glob("*.fastq.gz"):
         base_name = fastq_file.name.replace(".fastq.gz", "")
@@ -253,11 +271,9 @@ def main():
         fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
     print("Finished quality control for demultiplexed FASTQ files.")
 
-    #################################
-    #################################
-    # Remove primers
-    #################################
-    #################################
+    #####################################################
+    # 1.1.2 Primer removal from demultiplexed FASTQ files
+    ######################################################
 
     # Define the directory for primer trimmed FASTQ files
     primer_trimmed_dir = os.path.join(wor_dir, "fastq_files", "primers_removed")
@@ -288,6 +304,10 @@ def main():
         )
         print("Finished removing primers from demultiplexed FASTQ files.")
 
+    #####################################################
+    # 1.1.3 Quality control on primer trimmed FASTQ files
+    #####################################################
+
     # Perform quality control on primer trimmed FASTQ files
     primer_trimmed_qc_dir = os.path.join(wor_dir, "qc", "primers_removed")
 
@@ -317,6 +337,10 @@ def main():
             fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
         print("Finished quality control for primer trimmed FASTQ files.")
 
+    #########################################################
+    # 1.1.4 Plot read counts before and after primer trimming
+    ##########################################################
+
     # Plot read counts before and after primer trimming
     plot_read_counts_primer_trimmed(
         folder1=os.path.join(wor_dir, "qc", "demultiplexed"),
@@ -325,43 +349,22 @@ def main():
         plot_file=os.path.join(wor_dir, "qc", "read_counts_primer_trimmed.png"),
     )
 
-    #################################
-    #################################
-    # ASV table generation with DADA2
-    #################################
-    #################################
+    #########################################################
+    #########################################################
+    # 1.2 ASV table generation with DADA2
+    #########################################################
+    #########################################################
 
     # # Run the R script to generate ASV table
     generate_asv_table(wor_dir=wor_dir)
 
     print("Finished generating ASV table.")
 
-    ###############################
-    ###############################
-    # Taxonomy classification
-    ###############################
-    ###############################
-
-    # Define the path to the representative sequences fasta file
-    rep_seq_fasta = os.path.join(
-        wor_dir,
-        "representative_sequences",
-        "asv_sequences.fasta",
-    )
-
-    # Define output file path for the taxonomy classification
-    output_path = os.path.join(wor_dir, "taxonomic_classification", "taxonomy_data.csv")
-
-    # Use a pre-trained classifier
-    taxonomy_df = classify_taxonomy_nb(
-        rep_seq_fasta=rep_seq_fasta, output_path=output_path
-    )
-
-    ###############################################
-    ###############################################
-    # Prepare ASV table and merge with metadata
-    ###############################################
-    ###############################################
+    #######################################################
+    #######################################################
+    # 1.3 Prepare ASV table and merge with metadata
+    #######################################################
+    #######################################################
 
     # Path to ASV table
     asv_table_dir = os.path.join(wor_dir, "tables", "asv_tables")
@@ -401,11 +404,43 @@ def main():
     # Subset asv_table_dep_fil_df to only include samples in merged_df
     asv_table_dep_fil_df = asv_table_dep_fil_df[merged_df.index]
 
-    ###########################
-    ###########################
-    # Perform PICRust2 analysis
-    ###########################
-    ###########################
+    ##########################################################################
+    ##########################################################################
+    ##########################################################################
+    # 2. Taxonomy classification, functional prediction and phylogenetics
+    ###########################################################################
+    ###########################################################################
+
+    #####################################################
+    #####################################################
+    # 2.1 Taxonomy classification
+    #####################################################
+    #####################################################
+
+    # Define the path to the representative sequences fasta file
+    rep_seq_fasta = os.path.join(
+        wor_dir,
+        "representative_sequences",
+        "asv_sequences.fasta",
+    )
+
+    # Define output file path for the taxonomy classification
+    output_path = os.path.join(wor_dir, "taxonomic_classification", "taxonomy_data.csv")
+
+    # Use a pre-trained classifier
+    taxonomy_df = classify_taxonomy_nb(
+        rep_seq_fasta=rep_seq_fasta, output_path=output_path
+    )
+
+    #######################################################
+    #######################################################
+    # 2.5 PICRust2 analysis
+    #######################################################
+    #######################################################
+
+    #######################################
+    # 2.5.1 Run PICRUSt2 analysis
+    #######################################
 
     # Define directory for PICRUSt2 analysis
     picrust2_dir = os.path.join(wor_dir, "picrust2_analysis")
@@ -442,9 +477,9 @@ def main():
 
         print("PICRUSt2 analysis completed successfully.")
 
-    ######################################
-    # Add descriptions to PICRUSt2 output
-    ######################################
+    ###########################################
+    # 2.5.2 Add descriptions to PICRUSt2 output
+    ###########################################
 
     # Define pathway types and their parameters
     pathway_types = [
@@ -503,9 +538,9 @@ def main():
                 sys.exit(1)
             print(f"Descriptions added to {name} successfully.")
 
-        ####################################
-        #  Read and re-index PICRUSt2 output
-        ####################################
+        ###########################################
+        # 2.5.3 Read and re-index PICRUSt2 output
+        ###########################################
 
         # Read and re-index (always do this regardless of whether we skipped or ran the command)
         df = pd.read_csv(outfile, sep="\t", index_col=0)
@@ -532,13 +567,13 @@ def main():
     # metabolic_pathways_df = pathway_dfs["MetaCyc"]
 
     ###############################
-    # Ecological diversity analysis
+    # 2.6 Phylogenetic tree
     ################################
 
-    # Define diversity metircs folder
+    # Define diversity metrics folder
     div_met_dir = os.path.join(wor_dir, "diversity_metrics")
 
-    # Define directory for phlogenetics anaylsis
+    # Define directory for phylogenetics analysis
     phylo_dir = os.path.join(wor_dir, "phylogenetic_tree")
 
     rooted_tree, unrooted_tree, rooted_tree_newick_path = (
@@ -562,7 +597,7 @@ def main():
     rarefied_table_qza = convert_dataframe_to_qiime2_artifact(asv_table_rarefied)
 
     #######################################
-    # Caculate Alpha diversity all samples
+    # 1.7 Alpha diversity metrics
     #######################################
 
     # Define dir to output alpha results
@@ -582,9 +617,12 @@ def main():
         output_file=alpha_diversity_file,
     )
 
-    #########################
-    # All Locations Analysis
-    #########################
+    #######################################################################
+    #######################################################################
+    #######################################################################
+    # 3. Data analysis
+    #######################################################################
+    #######################################################################
 
     # Define beta diversity directory
     beta_div_dir = os.path.join(div_met_dir, "beta_diversity")
@@ -734,7 +772,7 @@ def main():
         print(f"Alpha diversity figure saved to {alpha_diversity_figure_file}")
 
         #########################
-        # Beta Diversity
+        # 2.1 Beta Diversity
         #########################
 
         # Path to Bray-Curtis directory

@@ -20,6 +20,29 @@ pixi run test-python &&
 pixi run test-r &&
 pixi run test-shell
 """
+
+[tool.black]
+exclude = '''
+/(
+  \.pixi
+  | \.git
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+skip = [".pixi", ".git", "build", "dist"]
+
+[tool.ruff]
+exclude = [
+  ".pixi",
+  ".git",
+  "build",
+  "dist"
+]
+
 [dependencies]
 _libgcc_mutex = "0.1.*"
 _openmp_mutex = "4.5.*"

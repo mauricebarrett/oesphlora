@@ -552,9 +552,11 @@ def main():
 
         if pathway["name"] == "KO":
             df.index = [
-                f"{idx.split(':')[1]} | {row['description']}"
-                if ":" in idx
-                else f"{idx} | {row['description']}"
+                (
+                    f"{idx.split(':')[1]} | {row['description']}"
+                    if ":" in idx
+                    else f"{idx} | {row['description']}"
+                )
                 for idx, row in df.iterrows()
             ]
         elif pathway["name"] == "EC":

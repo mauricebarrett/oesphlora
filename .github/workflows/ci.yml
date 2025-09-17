@@ -1,38 +1,31 @@
 name: CI   # Name of the workflow (appears in the Actions tab)
 
 on:
-  push:            # Run CI when code is pushed to the repo
-    branches: [ main ]   # Only for pushes to the main branch
-  pull_request:    # Run CI on every pull request targeting main
+  push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
 
 jobs:
-  build-and-test:     # The job name
-    runs-on: ubuntu-latest   # Spin up a fresh Ubuntu VM in GitHub Actions
+  build-and-test:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        # This clones your repository into the VM so the workflow can access your code
 
-      - name: Install pixi
-        run: |
-          curl -fsSL https://pixi.sh/install.sh | bash
-          echo "$HOME/.pixi/bin" >> $GITHUB_PATH
-        # This downloads and installs pixi
-        # Then adds pixi to the PATH so future steps can use it
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true   # enable dependency caching
 
       - name: Install dependencies
         run: pixi install
-        # This installs everything declared in your pixi.toml
-        # (Python, R, testthat, pytest, etc.)
 
       - name: Run tests
         run: pixi run test
-        # This runs your "meta task" which executes:
-        # 1. Python tests (pytest)
-        # 2. R tests (testthat)
-        # 3. Shell tests (bash)
+        # This will run all your meta-tasks (pytest, testthat, bash tests, etc.)
+
   commitizen-check:
     runs-on: ubuntu-latest
     name: Commitizen check for all commits
@@ -41,12 +34,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # required to get the full commit history
+          fetch-depth: 0   # full history needed for commit check
 
-      - name: Install pixi
-        run: |
-          curl -fsSL https://pixi.sh/install.sh | bash
-          echo "$HOME/.pixi/bin" >> $GITHUB_PATH
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
 
       - name: Install dependencies
         run: pixi install

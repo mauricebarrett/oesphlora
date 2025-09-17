@@ -55,9 +55,11 @@ repos:
       - id: style-files
         name: styler (R)              # auto-format R code to tidyverse style
         stages: [pre-commit]
+        language: system              # <--- ADD THIS LINE
       - id: lintr
         name: lintr (R)               # lint R code for style & errors
-        stages: [manual]               # run lintr manually due to performance
+        stages: [manual]              # run lintr manually due to performance
+        language: system              # <--- ADD THIS LINE
   # --- Shell script style checks (bashate: OpenStack style guide) ---
   - repo: https://github.com/openstack/bashate.git
     rev: '2.1.1'

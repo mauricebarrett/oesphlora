@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/mauricebarrett/oesphlora/compare/v1.1.0...v1.2.0) (2025-09-17)
+
+
+### Features
+
+* add linting and styling workflow using Pixi ([f9945ed](https://github.com/mauricebarrett/oesphlora/commit/f9945ed05113269ffa6b404ffec890c58e95496f))
+
 # [1.1.0](https://github.com/mauricebarrett/oesphlora/compare/v1.0.0...v1.1.0) (2025-09-14)
 
 

@@ -348,20 +348,20 @@ def pairwise_alpha_diversity_calculations(
     # Convert results list to DataFrame
     results_df = pd.DataFrame(results_list)
 
-    # Add a column for significance based on p-value via stars
-    results_df["significance"] = results_df["p-value"].apply(
-        lambda p: (
-            "****"
-            if p < 0.0001
-            else "***"
-            if p < 0.001
-            else "**"
-            if p < 0.01
-            else "*"
-            if p < 0.05
-            else "ns"
-        )
-    )
+    # Helper function for significance stars, friendly to all formatters
+    def get_significance(p):
+        if p < 0.0001:
+            return "****"
+        if p < 0.001:
+            return "***"
+        if p < 0.01:
+            return "**"
+        if p < 0.05:
+            return "*"
+        return "ns"
+
+    # Add a column for significance based on p-value
+    results_df["significance"] = results_df["p-value"].apply(get_significance)
 
     # Write results DataFrame to CSV
     results_df.to_csv(output_file, index=False)

@@ -3,6 +3,9 @@
 ![CI](https://github.com/mauricebarrett/oesphlora/actions/workflows/ci.yml/badge.svg?branch=main)
 ![Release](https://github.com/mauricebarrett/oesphlora/actions/workflows/release.yml/badge.svg?branch=main)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079.svg?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
+<!-- Pixi static badge -->
+[![Pixi](https://img.shields.io/badge/pixi-enabled-brightgreen)](https://pixi.sh)
+
 
 ## Overview
 This repository contains code and analysis scripts accompanying the manuscript entitled:

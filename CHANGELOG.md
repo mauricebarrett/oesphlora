@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/mauricebarrett/oesphlora/compare/v1.2.0...v1.3.0) (2025-09-17)
+
+
+### Features
+
+* add ruff, isort, and black dependencies to improve code quality ([76d7437](https://github.com/mauricebarrett/oesphlora/commit/76d7437a9f5f2534a2edad86fe15e3eb7f9d2769))
+
 # [1.2.0](https://github.com/mauricebarrett/oesphlora/compare/v1.1.0...v1.2.0) (2025-09-17)
 
 

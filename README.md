@@ -4,7 +4,8 @@
 ![Release](https://github.com/mauricebarrett/oesphlora/actions/workflows/release.yml/badge.svg?branch=main)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079.svg?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 <!-- Pixi static badge -->
-[![Pixi](https://img.shields.io/badge/pixi-enabled-brightgreen)](https://pixi.sh)
+[![Pixi Badge](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json)](https://pixi.sh)
+
 
 
 ## Overview

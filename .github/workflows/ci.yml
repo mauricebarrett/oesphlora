@@ -18,10 +18,8 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.8.1
         with:
           cache: true   # enable dependency caching
-          post-cleanup: false  # Add this line
-
-      - name: Install dependencies
-        run: pixi install
+          post-cleanup: false
+          locked: false  # Don't use --locked flag
 
       - name: Run tests
         run: pixi run test
@@ -41,10 +39,6 @@ jobs:
         uses: prefix-dev/setup-pixi@v0.8.1
         with:
           cache: true
-          post-cleanup: false  # Add this line
-
-      - name: Install dependencies
-        run: pixi install
 
       - name: Check latest commit message with Commitizen
         run: |

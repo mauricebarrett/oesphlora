@@ -20,23 +20,13 @@ pixi run test-r &&
 pixi run test-shell
 """
 
-[tasks.lint-ruff]
-cmd = "ruff check . --exclude .pixi --exclude build --exclude dist"
-
-[tasks.lint-isort]
-cmd = "isort --check-only . --skip .pixi --skip build --skip dist"
-
 [tasks.lint]
-cmd = """
-pixi run lint-ruff &&
-pixi run lint-isort
-"""
+cmd = "ruff check . --exclude .pixi --exclude build --exclude dist"
 
 [tasks.format]
 cmd = """
 ruff check --fix . --exclude .pixi --exclude build --exclude dist &&
-ruff format . --exclude .pixi --exclude build --exclude dist &&
-isort . --skip .pixi --skip build --skip dist
+ruff format . --exclude .pixi --exclude build --exclude dist
 """
 
 [dependencies]
@@ -805,7 +795,6 @@ r-precommit = ">=0.4.3,<0.5"
 commitizen = ">=4.8.4,<5"
 r-testthat = ">=3.2.3,<4"
 ruff = ">=0.13.0,<0.14"
-isort = ">=6.0.1,<7"
 black = ">=25.1.0,<26"
 
 [pypi-dependencies]

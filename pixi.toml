@@ -14,7 +14,6 @@ cmd = "Rscript -e 'testthat::test_dir(\"tests\")'"
 cmd = "bash tests/test_example.sh"
 
 [tasks.test]
-# Master test task: runs all subtasks in sequence
 cmd = """
 pixi run test-python &&
 pixi run test-r &&
@@ -24,46 +23,19 @@ pixi run test-shell
 [tasks.lint-ruff]
 cmd = "ruff check . --exclude .pixi --exclude build --exclude dist"
 
-[tasks.lint-black]
-cmd = "black --check . --exclude '\\.pixi|build|dist'"
-
 [tasks.lint-isort]
 cmd = "isort --check-only . --skip .pixi --skip build --skip dist"
 
 [tasks.lint]
 cmd = """
 pixi run lint-ruff &&
-pixi run lint-black &&
 pixi run lint-isort
 """
 
 [tasks.format]
 cmd = """
 ruff check --fix . --exclude .pixi --exclude build --exclude dist &&
-black . --exclude '\\.pixi|build|dist' &&
-isort . --skip .pixi --skip build --skip dist
-"""
-
-[tasks.lint-ruff]
-cmd = "ruff check . --exclude .pixi --exclude build --exclude dist"
-
-[tasks.lint-black]
-cmd = "black --check . --exclude '\\.pixi|build|dist'"
-
-[tasks.lint-isort]
-cmd = "isort --check-only . --skip .pixi --skip build --skip dist"
-
-[tasks.lint]
-cmd = """
-pixi run lint-ruff &&
-pixi run lint-black &&
-pixi run lint-isort
-"""
-
-[tasks.format]
-cmd = """
-ruff check --fix . --exclude .pixi --exclude build --exclude dist &&
-black . --exclude '\\.pixi|build|dist' &&
+ruff format . --exclude .pixi --exclude build --exclude dist &&
 isort . --skip .pixi --skip build --skip dist
 """
 

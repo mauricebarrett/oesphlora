@@ -19,5 +19,8 @@ jobs:
         with:
           cache: true
 
+      - name: Install dependencies
+        run: pixi install
+
       - name: Run lint task
         run: pixi run lint

@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/mauricebarrett/oesphlora/compare/v1.3.0...v1.4.0) (2025-09-19)
+
+
+### Features
+
+* add rust dependency to pixi.toml and update pixi.lock with rust packages ([b19a6e0](https://github.com/mauricebarrett/oesphlora/commit/b19a6e0d58a7f1e043b3b6ff7b0c4c78d09f1d10))
+
 # [1.3.0](https://github.com/mauricebarrett/oesphlora/compare/v1.2.0...v1.3.0) (2025-09-17)
 
 

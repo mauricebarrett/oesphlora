@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/mauricebarrett/oesphlora/compare/v1.4.0...v1.5.0) (2025-09-19)
+
+
+### Features
+
+* add pre-commit dependency to pixi.toml ([1c1763f](https://github.com/mauricebarrett/oesphlora/commit/1c1763f84cb28ba7ff77638ec068965081b16d2c))
+
 # [1.4.0](https://github.com/mauricebarrett/oesphlora/compare/v1.3.0...v1.4.0) (2025-09-19)
 
 

@@ -1,5 +1,4 @@
-
-# pixi environments
+.cargo
 .pixi
 *.egg-info
 .vscode/

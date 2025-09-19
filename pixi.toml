@@ -1,8 +1,28 @@
 [project]
-channels = ["https://packages.qiime2.org/qiime2/2024.10/amplicon/released", "conda-forge", "bioconda"]
+channels = [
+  "conda-forge",
+  "bioconda",
+  "https://packages.qiime2.org/qiime2/2024.10/amplicon/released"
+]
 name = "oesphlora"
 platforms = ["linux-64"]
 version = "0.1.0"
+
+[environments]
+setup = ["setup"]
+data-processing = ["data-processing"]
+
+
+[activation.env]
+# Put Cargo home inside your project
+CARGO_HOME = "$PIXI_PROJECT_ROOT/.cargo"
+PATH = "$CARGO_HOME/bin:$PATH"
+PKG_CONFIG_PATH = "$PIXI_ENV_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+
+
+[tasks.setup]
+cmd = "echo Installing fqkit locally; cargo install fqkit --version 0.4.14; echo fqkit installed"
+
 
 [tasks.test-python]
 cmd = "pytest -q"
@@ -29,7 +49,26 @@ ruff check --fix . --exclude .pixi --exclude build --exclude dist &&
 ruff format . --exclude .pixi --exclude build --exclude dist
 """
 
+
 [dependencies]
+python = "3.10.*"
+
+[feature.setup.dependencies]
+# Compression libs
+zlib = "*"
+bzip2 = "*"
+libpng = "*"
+expat = "*"
+brotli = "*"
+xz = "*"
+zstd = "*"
+
+# Font/rendering
+freetype = "*"
+fontconfig = "*"
+
+
+[feature.data-processing.dependencies]
 _libgcc_mutex = "0.1.*"
 _openmp_mutex = "4.5.*"
 _r-mutex = "1.0.1.*"
@@ -796,7 +835,6 @@ commitizen = ">=4.8.4,<5"
 r-testthat = ">=3.2.3,<4"
 ruff = ">=0.13.0,<0.14"
 black = ">=25.1.0,<26"
-rust = ">=1.77.2,<1.78"
 
 [pypi-dependencies]
 bionumpy = "==1.0.13"

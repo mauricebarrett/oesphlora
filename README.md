@@ -5,7 +5,7 @@
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079.svg?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 [![Pixi Badge](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json)](https://pixi.sh)
 [![GitHub release](https://img.shields.io/github/v/release/OWNER/REPO)](https://github.com/OWNER/REPO/releases)
-
+[![Docker Pulls](https://img.shields.io/docker/pulls/DOCKERHUB_USER/IMAGE)](https://hub.docker.com/r/DOCKERHUB_USER/IMAGE)
 
 
 ## Overview

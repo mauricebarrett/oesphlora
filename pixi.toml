@@ -52,6 +52,8 @@ ruff format . --exclude .pixi --exclude build --exclude dist
 
 [dependencies]
 python = "3.10.*"
+pre-commit = ">=4.3.0,<5"
+
 
 [feature.setup.dependencies]
 # Compression libs

@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/mauricebarrett/oesphlora/compare/v1.5.0...v1.6.0) (2025-09-19)
+
+
+### Features
+
+* update dependencies in pixi.toml to include commitizen, ruff, and pytest-check ([bb0eb4a](https://github.com/mauricebarrett/oesphlora/commit/bb0eb4a2e066e9b4b274b39f9d247a43de5d9959))
+
 # [1.5.0](https://github.com/mauricebarrett/oesphlora/compare/v1.4.0...v1.5.0) (2025-09-19)
 
 

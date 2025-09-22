@@ -1,0 +1,29 @@
+# Ignore caches, virtual environments, and local build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info
+.eggs/
+.env
+.venv
+.conda
+node_modules/
+build/
+dist/
+.ipynb_checkpoints
+
+# Ignore git and CI/CD metadata
+.git
+.gitignore
+.github
+
+# Ignore large datasets (users should mount them instead)
+data/
+*.csv
+*.tsv
+*.parquet
+*.h5
+*.zip
+*.tar.gz

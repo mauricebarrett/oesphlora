@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/mauricebarrett/oesphlora/compare/v1.6.0...v1.7.0) (2025-09-22)
+
+
+### Features
+
+* add Dockerfile for multi-stage build and environment setup ([b59d7e0](https://github.com/mauricebarrett/oesphlora/commit/b59d7e0ba59c2d984eb1ba58b71ce53174b8b91e))
+
 # [1.6.0](https://github.com/mauricebarrett/oesphlora/compare/v1.5.0...v1.6.0) (2025-09-19)
 
 

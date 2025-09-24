@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/mauricebarrett/oesphlora/compare/v1.7.0...v1.7.1) (2025-09-24)
+
+
+### Bug Fixes
+
+* update Dockerfile and pixi.toml to remove deprecated dependencies and adjust environment setup ([10fb400](https://github.com/mauricebarrett/oesphlora/commit/10fb400ee2ae9a14e24eaa8ea29905519b804588))
+
 # [1.7.0](https://github.com/mauricebarrett/oesphlora/compare/v1.6.0...v1.7.0) (2025-09-22)
 
 

@@ -416,8 +416,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyzmq-24.0.1-py310h330234f_1.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-alignment-2024.10.0-py310h500e9c1_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-composition-2024.10.0-py310h3f7cb81_0.tar.bz2
-      - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-cutadapt-2024.10.0-py310h29f0b32_0.tar.bz2
-      - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-dada2-2024.10.0-py310hf76d30f_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-deblur-2024.10.0-py310h918c320_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-demux-2024.10.0-py310h06caff7_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-diversity-2024.10.0-py310hd625f91_0.tar.bz2
@@ -439,7 +437,6 @@ environments:
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-vizard-2024.10.0-py310hd98517b_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-vsearch-2024.10.0-py310hb216672_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2cli-2024.10.1-py310h2c1950c_0.tar.bz2
-      - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2galaxy-2024.10.0-py310hf370668_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2templates-2024.10.0-py310h2690626_0.tar.bz2
       - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/qiime2-2024.10.1-py310h0fb5ea9_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/qt-main-5.15.8-hc9dc06e_21.conda
@@ -7943,38 +7940,6 @@ packages:
   license_family: BSD
   size: 613520
   timestamp: 1729975145689
-- conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-cutadapt-2024.10.0-py310h29f0b32_0.tar.bz2
-  sha256: 9279cd8cadab250bcbab4d577b01cdae1bad0ad4801f6b940a72468eda0ca437
-  md5: 621bae6f108e19c344fa9f1ce2cad2e5
-  depends:
-  - cutadapt >=3
-  - numpy
-  - pandas 2.2.2.*
-  - pigz
-  - python >=3.10,<3.11.0a0
-  - python_abi 3.10.* *_cp310
-  - q2-types 2024.10.*
-  - qiime2 2024.10.*
-  license: BSD-3-Clause
-  license_family: BSD
-  size: 6596548
-  timestamp: 1729975140918
-- conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-dada2-2024.10.0-py310hf76d30f_0.tar.bz2
-  sha256: 94bacbd5d5cf8e1599052aa7a2dd79c72794e97862eefebd851fdbcfcf457cea
-  md5: b7b92bae75cf82e831733d789e23acca
-  depends:
-  - bioconductor-dada2
-  - biom-format 2.1.15.*
-  - python >=3.10,<3.11.0a0
-  - python_abi 3.10.* *_cp310
-  - q2-types 2024.10.*
-  - qiime2 2024.10.*
-  - r-base 4.3.3.*
-  - r-optparse >=1.7.1
-  license: BSD-3-Clause
-  license_family: BSD
-  size: 1939763
-  timestamp: 1729975143115
 - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2-deblur-2024.10.0-py310h918c320_0.tar.bz2
   sha256: a29880b0af7192afa8b7b9d9dcfedef3bbf149f921d173d96cc46884a7402fb4
   md5: 36fd376be4d0e645a2f8027b09b23fac
@@ -8372,19 +8337,6 @@ packages:
   license_family: BSD
   size: 168622
   timestamp: 1729974637663
-- conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2galaxy-2024.10.0-py310hf370668_0.tar.bz2
-  sha256: 4e9291452a7e287eb3fb2b85380d394c1d0bbdd24b0658931bd060cab0fbf003
-  md5: f9ca30a60e38be63fedba61374304bde
-  depends:
-  - click
-  - lxml
-  - python >=3.10,<3.11.0a0
-  - python_abi 3.10.* *_cp310
-  - qiime2 2024.10.*
-  license: BSD-3-Clause
-  license_family: BSD
-  size: 61207
-  timestamp: 1729974636584
 - conda: https://packages.qiime2.org/qiime2/2024.10/amplicon/released/linux-64/q2templates-2024.10.0-py310h2690626_0.tar.bz2
   sha256: 99d2169d1cfae995f29fc7573e1f0f74d0ac642698c965c6f893611d21294a8c
   md5: 0bf809833c3b5ea9cb01383cac25f1fb

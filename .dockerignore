@@ -1,4 +1,6 @@
 # Ignore caches, virtual environments, and local build artifacts
+.pixi/
+.cargo/
 __pycache__/
 *.pyc
 *.pyo

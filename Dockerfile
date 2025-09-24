@@ -7,12 +7,18 @@ FROM ghcr.io/prefix-dev/pixi:0.40.0 AS build
 COPY . /app
 WORKDIR /app
 
-# Install dependencies into the "prod" environment
-# (make sure you have an [env.prod] defined in pixi.toml)
-RUN pixi install -e prod
+# Install all environments
+RUN pixi install -e default
+RUN pixi install -e setup
+RUN pixi install -e data-processing
+
+
+# Run setup task (installs fqkit into /app/.cargo/bin)
+RUN pixi run -e setup setup
+
 
 # Generate a shell hook that sets up the environment
-RUN pixi shell-hook -e prod > /shell-hook.sh
+RUN pixi shell-hook -e default > /shell-hook.sh
 
 # Add a line so any command passed to "docker run" executes inside the env
 RUN echo 'exec "$@"' >> /shell-hook.sh
@@ -27,7 +33,6 @@ FROM ubuntu:24.04 AS production
 WORKDIR /app
 
 # Copy environment + project code + shell hook from build stage
-COPY --from=build /app/.pixi/envs/prod /app/.pixi/envs/prod
 COPY --from=build /app /app
 COPY --from=build /shell-hook.sh /shell-hook.sh
 

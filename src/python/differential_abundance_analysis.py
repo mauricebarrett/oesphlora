@@ -21,8 +21,10 @@ def linda_daa_asv(
     asv_table: pd.DataFrame,
     metadata: pd.DataFrame,
     primary_variable: str,
+    threshold: float,
     taxonomy_table: pd.DataFrame,
     output_file: str,
+    pairwise: bool = False,
 ) -> pd.DataFrame:
     """Run the LINDA analysis.
 
@@ -72,7 +74,16 @@ def linda_daa_asv(
         # Subset OTU table base on metadata
         asv_table_subset_df = asv_table[metadata_subset.index]
 
-        asv_table_subset_df.isna().any().any()
+        # Filter on prevalence
+        asv_table_subset_df = prevalence_filtering(asv_table_subset_df, threshold)
+
+        # Remove samples (columns) with depth < 1000
+        asv_table_subset_df = asv_table_subset_df.loc[
+            :, asv_table_subset_df.sum(axis=0) >= 1000
+        ]
+
+        # subset metadata to only include samples present in the filtered asv table
+        metadata_subset = metadata_subset.loc[asv_table_subset_df.columns]
 
         # Skip if there are fewer than 4 samples (columns) - LINDA's correlation calculations need sufficient samples
         if asv_table_subset_df.shape[1] < 4:
@@ -93,12 +104,19 @@ def linda_daa_asv(
         # Assigning converted dataframes to R's global environment
         r.assign("asv_table_df", r_asv_table_df)
         r.assign("metadata_df", r_metadata)
-        formula = f"~ {primary_variable}"
+
+        if pairwise:
+            formula = f"~ {primary_variable}+(1|patient_id)"
+        else:
+            formula = f"~ {primary_variable}"
+
         r.assign("formula", formula)
 
         # Retrieve the factor levels of the primary variable in R
         levels_r = r(f"levels(as.factor(metadata_df${primary_variable}))")
         levels = list(levels_r)
+
+        print(f"Levels in R: {levels}")
 
         r_group_a, r_group_b = levels
 
@@ -127,7 +145,7 @@ def linda_daa_asv(
         linda_results_df["neg_log10_pvalue"] = -np.log10(linda_results_df["padj"])
 
         linda_results_df["direction"] = linda_results_df["log2FoldChange"].apply(
-            lambda log2fc: f"Up in {r_group_a}" if log2fc > 0 else f"Up in {r_group_b}"
+            lambda log2fc: f"Up in {r_group_b}" if log2fc > 0 else f"Up in {r_group_a}"
         )
 
         linda_results_df["comparison"] = f"{r_group_a} vs {r_group_b}"
@@ -214,7 +232,9 @@ def linda_daa_taxon(
     taxon_table_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
     primary_variable: str,
+    threshold: float,
     output_file: str,
+    pairwise: bool = False,
 ) -> pd.DataFrame:
     """Run the LINDA analysis for a single categorical comparison.
 
@@ -277,7 +297,15 @@ def linda_daa_taxon(
         taxon_table_fil_df = taxon_table_df[metadata_subset_df.index]
 
         # Filter on prevalence
-        taxon_table_fil_df = prevalence_filtering(taxon_table_fil_df, 5)
+        taxon_table_fil_df = prevalence_filtering(taxon_table_fil_df, threshold)
+
+        # Remove samples (columns) with depth < 1000
+        taxon_table_fil_df = taxon_table_fil_df.loc[
+            :, taxon_table_fil_df.sum(axis=0) >= 1000
+        ]
+
+        # subset metadata to only include samples present in the filtered taxon table
+        metadata_subset_df = metadata_subset_df.loc[taxon_table_fil_df.columns]
 
         # Skip if there are fewer than 4 samples (columns)
         if taxon_table_fil_df.shape[1] < 4:
@@ -298,7 +326,11 @@ def linda_daa_taxon(
         # Assigning converted dataframes to R's global environment
         r.assign("taxon_table_df", r_taxon_table_df)
         r.assign("metadata_df", r_metadata_subset_df)
-        formula = f"~ {primary_variable}"
+
+        if pairwise:
+            formula = f"~ {primary_variable}+(1|patient_id)"
+        else:
+            formula = f"~ {primary_variable}"
         r.assign("formula", formula)
         r.assign("primary_variable", primary_variable)
 
@@ -333,7 +365,7 @@ def linda_daa_taxon(
         linda_results_df["neg_log10_pvalue"] = -np.log10(linda_results_df["padj"])
 
         linda_results_df["direction"] = linda_results_df["log2FoldChange"].apply(
-            lambda log2fc: f"Up in {group_b}" if log2fc > 0 else f"Up in {group_a}"
+            lambda log2fc: f"Up in {r_group_b}" if log2fc > 0 else f"Up in {r_group_a}"
         )
 
         print(f"Appending results for {r_group_a} vs {r_group_b}")
@@ -372,8 +404,10 @@ def linda_daa_picrust2(
     function_table_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
     primary_variable: str,
+    threshold: float,
     output_file: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+    pairwise: bool = False,
+) -> pd.DataFrame:
     """Run the LINDA analysis for a single categorical comparison.
 
     Args:
@@ -382,7 +416,7 @@ def linda_daa_picrust2(
         primary_variable (str): The column name for the categorical variable of interest.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame]: Full results and filtered significant results.
+        pd.DataFrame: Filtered significant results.
     """
 
     print(f"Running LINDA analysis for categorical variable: '{primary_variable}'")
@@ -390,26 +424,11 @@ def linda_daa_picrust2(
     # Define path to filtered DAA results by replacing .csv extension with _filtered.csv
     filtered_output_file = output_file.replace(".csv", "_filtered.csv")
 
-    # Skip if the filtered results file already exists
-    if os.path.exists(filtered_output_file):
-        print(
-            f"Filtered results file {filtered_output_file} already exists. Skipping analysis."
-        )
-        return pd.read_csv(output_file), pd.read_csv(filtered_output_file)
-
     # Drop rows with missing values in the primary variable
     metadata_df = metadata_df.dropna(subset=[primary_variable])
 
     # Get unique groups in the primary variable
     unique_groups = metadata_df[primary_variable].unique()
-
-    # Check if there are at least 2 unique groups
-    if len(unique_groups) < 2:
-        print(
-            f"Error: Expected at least 2 unique groups in '{primary_variable}', found {len(unique_groups)}."
-        )
-        print("Skipping analysis due to insufficient groups.")
-        return pd.DataFrame(), pd.DataFrame()
 
     # Generate all pairwise combinations of the unique groups
     pairwise_combinations = list(itertools.combinations(unique_groups, 2))
@@ -424,25 +443,26 @@ def linda_daa_picrust2(
             metadata_df[primary_variable].isin([group_a, group_b])
         ].copy()
 
-        # Check if the subset has at least one sample for each group
-        if metadata_subset_df[primary_variable].nunique() != 2:
-            print(
-                f"Skipping {group_a} vs {group_b}: insufficient data in metadata_subset"
-            )
-            continue
+        # order the factor levels in the metadata subset to match group_a, group_b
+        metadata_subset_df[primary_variable] = pd.Categorical(
+            metadata_subset_df[primary_variable],
+            categories=[group_a, group_b],
+            ordered=True,
+        )
 
         # Subset OTU table base on metadata
         function_table_fil_df = function_table_df[metadata_subset_df.index]
 
         # Filter on prevalence
-        function_table_fil_df = prevalence_filtering(function_table_fil_df, 5)
+        function_table_fil_df = prevalence_filtering(function_table_fil_df, threshold)
 
-        # Skip if there are fewer than 4 samples (columns)
-        if function_table_fil_df.shape[1] < 4:
-            print(
-                f"Error: only {function_table_fil_df.shape[1]} samples found (minimum 4 required)"
-            )
-            continue
+        # Remove samples (columns) with depth < 1000
+        function_table_fil_df = function_table_fil_df.loc[
+            :, function_table_fil_df.sum(axis=0) >= 1000
+        ]
+
+        # subset metadata to only include samples present in the filtered function table
+        metadata_subset_df = metadata_subset_df.loc[function_table_fil_df.columns]
 
         # Suppress FutureWarning from rpy2
         with warnings.catch_warnings():
@@ -456,7 +476,12 @@ def linda_daa_picrust2(
         # Assigning converted dataframes to R's global environment
         r.assign("taxon_table_df", r_function_table_df)
         r.assign("metadata_df", r_metadata_subset_df)
-        formula = f"~ {primary_variable}"
+
+        if pairwise:
+            formula = f"~ {primary_variable}+(1|patient_id)"
+        else:
+            formula = f"~ {primary_variable}"
+
         r.assign("formula", formula)
 
         # Retrieve the factor levels of the primary variable in R
@@ -520,4 +545,4 @@ def linda_daa_picrust2(
     results_filtered_df.to_csv(filtered_output_file, index=False)
     print(f"Filtered results saved to {filtered_output_file}")
 
-    return results_df, results_filtered_df
+    return results_filtered_df

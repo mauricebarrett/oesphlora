@@ -6,6 +6,11 @@ import biom  # type: ignore
 import numpy as np
 import pandas as pd
 import scipy.stats  # type: ignore
+
+# Disable CUDA to avoid GPU initialization errors
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["NUMBA_DISABLE_CUDA"] = "1"
+
 from gemelli.ctf import ctf  # type: ignore
 from qiime2 import Artifact  # type: ignore
 from qiime2.plugins.diversity.pipelines import alpha_phylogenetic  # type: ignore
@@ -249,13 +254,141 @@ def calculate_alpha_diversity(
     return alpha_diversity_merged_df
 
 
-def pairwise_alpha_diversity_calculations(
+def paired_alpha_diversity_calculations(
     alpha_diversity_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
     primary_variable: str,
     output_file: str,
 ) -> pd.DataFrame:
-    """Perform pairwise comparisons of alpha diversity between groups.
+    """
+    Perform pairwise comparisons of alpha diversity between groups using paired Wilcoxon signed-rank tests.
+
+    Args:
+        alpha_diversity_df (pd.DataFrame): DataFrame containing alpha diversity metrics (indexed by sample_id).
+        metadata_df (pd.DataFrame): DataFrame containing sample metadata (including 'sample_id' and 'patient_id').
+        primary_variable (str): The column in metadata_df to group by (e.g., condition, timepoint).
+        output_file (str): Path to write the output CSV file.
+
+    Returns:
+        pd.DataFrame: DataFrame containing pairwise comparison results with z-score scaled within-patient differences.
+    """
+
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    results_list = []
+
+    # Get unique groups for comparisons
+    groups = metadata_df[primary_variable].dropna().unique()
+
+    # Loop over all pairwise group comparisons
+    for g1, g2 in combinations(groups, 2):
+        print(f"Comparing {g1} vs {g2}")
+
+        # Get patients that appear in both groups
+        meta_g1 = metadata_df[metadata_df[primary_variable] == g1]
+        meta_g2 = metadata_df[metadata_df[primary_variable] == g2]
+        common_patients = set(meta_g1["patient_id"]).intersection(meta_g2["patient_id"])
+
+        if not common_patients:
+            print(f"No common patients between {g1} and {g2}. Skipping.")
+            continue
+
+        # Subset to common patients only
+        subset_meta = metadata_df[metadata_df["patient_id"].isin(common_patients)]
+
+        # Merge alpha diversity data with metadata
+        merged_df = alpha_diversity_df.merge(subset_meta, on="sample_id")
+
+        # Define metrics to test
+        metrics = [
+            "Faith's phylogenetic diversity",
+            "Observed Features",
+            "Simpson's dominance index",
+            "Simpson's diversity index",
+        ]
+
+        for metric in metrics:
+            # Pivot so each row = patient, columns = group values
+            paired_df = merged_df.pivot_table(
+                index="patient_id", columns=primary_variable, values=metric
+            ).dropna(subset=[g1, g2])
+
+            if paired_df.shape[0] < 1:
+                print(f"No paired data for {metric} in {g1} vs {g2}. Skipping.")
+                continue
+
+            # Extract aligned values
+            x = paired_df[g1]
+            y = paired_df[g2]
+
+            # Paired Wilcoxon signed-rank test
+            stat, p_value = scipy.stats.wilcoxon(x, y, alternative="two-sided")
+
+            # Compute within-patient differences
+            differences = x - y
+            raw_median_diff = differences.median()
+            pooled_std = differences.std()
+            zscore_diff = raw_median_diff / pooled_std if pooled_std != 0 else 0
+
+            # Direction of change
+            if raw_median_diff > 0:
+                relative_change = f"up in {g1}"
+            elif raw_median_diff < 0:
+                relative_change = f"up in {g2}"
+            else:
+                relative_change = "no change"
+
+            # Store results
+            results_list.append(
+                {
+                    "group1": g1,
+                    "group2": g2,
+                    "comparison": f"{g1}_vs_{g2}",
+                    "metric": metric,
+                    "relative_change": relative_change,
+                    "Wilcoxon_statistic": stat,
+                    "p-value": p_value,
+                    "median_diff": raw_median_diff,
+                    "zscore_diff": zscore_diff,
+                }
+            )
+
+    # Convert results list to DataFrame
+    results_df = pd.DataFrame(results_list)
+
+    # Significance stars
+    def get_significance(p):
+        if p < 0.0001:
+            return "****"
+        elif p < 0.001:
+            return "***"
+        elif p < 0.01:
+            return "**"
+        elif p < 0.05:
+            return "*"
+        else:
+            return "ns"
+
+    results_df["significance"] = results_df["p-value"].apply(get_significance)
+
+    # Write to CSV
+    results_df.to_csv(output_file, index=False)
+    print(f"\nResults saved to {output_file}")
+
+    return results_df
+
+
+def unpaired_alpha_diversity_calculations(
+    alpha_diversity_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
+    primary_variable: str,
+    output_file: str,
+) -> pd.DataFrame:
+    """Perform mannwhitneyu between every pair of groups for each alpha diversity metric.
+
+    Similar to pairwise_alpha_diversity_calculations but without patient matching.
+    Uses Mann-Whitney U test to compare all samples between groups directly.
 
     Args:
         alpha_diversity_df (pd.DataFrame): DataFrame containing alpha diversity metrics.
@@ -264,7 +397,7 @@ def pairwise_alpha_diversity_calculations(
         output_file (str): Path to write out pandas dataframe as csv.
 
     Returns:
-        pd.DataFrame: DataFrame containing pairwise comparison results.
+        pd.DataFrame: DataFrame containing pairwise comparison results with z-score scaled differences.
     """
 
     # Create output directory if it doesn't exist
@@ -273,40 +406,18 @@ def pairwise_alpha_diversity_calculations(
     # Initialize results list to store comparison results
     results_list = []
 
+    # Merge alpha diversity with metadata
+    merged_df = alpha_diversity_df.merge(
+        metadata_df, left_on="sample_id", right_on="sample_id"
+    )
+
     # Get groups from metadata
     groups = metadata_df[primary_variable].unique()
 
     for g1, g2 in combinations(groups, 2):
-        print(g1, g2)
         comparison = f"{g1}_vs_{g2}"
 
-        # Subset metadata by g1
-        meta_g1 = metadata_df[metadata_df[primary_variable] == g1]
-        meta_g2 = metadata_df[metadata_df[primary_variable] == g2]
-
-        # Find the intersection of patients_id in both groups
-        common_patients = set(meta_g1["patient_id"]).intersection(
-            set(meta_g2["patient_id"])
-        )
-
-        if not common_patients:
-            print(
-                f"No common patients found between groups {g1} and {g2}. Skipping comparison."
-            )
-            continue
-
-        # Subset metadata to only include common patients
-        meta_data_subset_df = metadata_df[
-            metadata_df["patient_id"].isin(common_patients)
-        ]
-
-        # Merge alpha diversity with subset metadata
-        merged_df = alpha_diversity_df.merge(
-            meta_data_subset_df, left_on="sample_id", right_on="sample_id"
-        )
-
-        # Perform pairwise wilcoxon test for each alpha diversity metric
-
+        # Perform pairwise test for each alpha diversity metric
         for metric in [
             "Faith's phylogenetic diversity",
             "Observed Features",
@@ -316,17 +427,29 @@ def pairwise_alpha_diversity_calculations(
             group1_values = merged_df[merged_df[primary_variable] == g1][metric]
             group2_values = merged_df[merged_df[primary_variable] == g2][metric]
 
-            # Perform Wilcoxon rank-sum test (Mann-Whitney U test)
+            # Skip if either group has no data
+            if len(group1_values) == 0 or len(group2_values) == 0:
+                print(f"No data for {metric} in groups {g1} or {g2}. Skipping.")
+                continue
+
+            # Perform Mann-Whitney U test
             stat, p_value = scipy.stats.mannwhitneyu(
                 group1_values, group2_values, alternative="two-sided"
             )
 
-            # Diffenece in medians
-            median_diff = group1_values.median() - group2_values.median()
+            # Calculate z-score standardized difference
+            pooled_values = pd.concat([group1_values, group2_values])
+            pooled_std = pooled_values.std()
+            raw_median_diff = group1_values.median() - group2_values.median()
 
-            if median_diff > 0:
+            if pooled_std != 0:
+                zscore_diff = raw_median_diff / pooled_std
+            else:
+                zscore_diff = 0.0  # Handle division by zero
+
+            if raw_median_diff > 0:
                 relative_change = "up in " + str(g1)
-            elif median_diff < 0:
+            elif raw_median_diff < 0:
                 relative_change = "up in " + str(g2)
             else:
                 relative_change = "no change"
@@ -338,17 +461,20 @@ def pairwise_alpha_diversity_calculations(
                     "group2": g2,
                     "comparison": comparison,
                     "metric": metric,
+                    "n_group1": len(group1_values),
+                    "n_group2": len(group2_values),
                     "relative_change": relative_change,
                     "U-statistic": stat,
                     "p-value": p_value,
-                    "median_diff": median_diff,
+                    "median_diff": raw_median_diff,
+                    "zscore_diff": zscore_diff,
                 }
             )
 
     # Convert results list to DataFrame
     results_df = pd.DataFrame(results_list)
 
-    # Helper function for significance stars, friendly to all formatters
+    # Helper function for significance stars
     def get_significance(p):
         if p < 0.0001:
             return "****"
@@ -464,5 +590,7 @@ def perform_ctf(
     )
     sample_df.to_csv(os.path.join(output_dir, "ctf_sample_coordinates.csv"))
     feature_df.to_csv(os.path.join(output_dir, "ctf_feature_coordinates.csv"))
+
+    return ordination_results, distance_df
 
     return ordination_results, distance_df

@@ -42,6 +42,12 @@ dispersion_F <- dispersion_test$tab$F[1]
 dispersion_p_value <- dispersion_test$tab$`Pr(>F)`[1]
 
 results_df <- data.frame(
-  metric = c("pseudo_F", "p_value", "r_squared", "dispersion_F", "dispersion_p_value"),
+  metric = c(
+    "pseudo_F",
+    "p_value",
+    "r_squared",
+    "dispersion_F",
+    "dispersion_p_value"
+  ),
   value = c(pseudo_F, p_value, r_squared, dispersion_F, dispersion_p_value)
 )

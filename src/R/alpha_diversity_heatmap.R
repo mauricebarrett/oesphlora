@@ -1,6 +1,4 @@
 library(ggplot2)
-library(dplyr)
-library(tidyr)
 library(reshape2)
 
 
@@ -14,33 +12,49 @@ plot_title_names <- title_list[[2]]
 
 data_df$comparison <- gsub("biopsy_location_", "", data_df$comparison)
 
+# Use z-score scaling
+plot_column <- "zscore_diff"
+legend_label <- "Z-score Difference"
+caption_text <- "* <= 0.05, ** <= 0.01, *** <= 0.001"
 
-data_matrix <- dcast(data_df, metric ~ comparison, value.var = "median_diff")
+# Create data matrix for clustering
+data_matrix <- dcast(data_df, metric ~ comparison, value.var = plot_column)
+data_matrix <- dcast(data_df, metric ~ comparison, value.var = plot_column)
 rownames(data_matrix) <- data_matrix$metric
 data_matrix <- data_matrix[, -1]
 
 # Replace NA values with 0
 data_matrix[is.na(data_matrix)] <- 0
 
-# Cluster features
-hc <- hclust(dist(data_matrix, method = "euclidean"), method = "ward.D2")
-ordered_metrics <- rownames(data_matrix)[hc$order]
-
-# Prepare data for plotting
-data_df$metric <- factor(data_df$metric, levels = ordered_metrics)
-
+# Set symmetric color scale for z-scores
+max_abs_val <- max(abs(data_df[[plot_column]]), na.rm = TRUE)
+color_limits <- c(-max_abs_val, max_abs_val)
 
 plot <- ggplot(data_df, aes(x = comparison, y = metric)) +
-  geom_tile(aes(fill = median_diff), color = "black") + # Moved color outside aes()
+  geom_tile(aes(fill = .data[[plot_column]]), color = "black") +
   scale_fill_gradient2(
-    low = "darkblue", mid = "white", high = "darkred", midpoint = 0,
-    space = "Lab", na.value = "grey90", name = "Difference in Medians"
+    low = "darkblue",
+    mid = "white",
+    high = "darkred",
+    midpoint = 0,
+    space = "Lab",
+    na.value = "grey90",
+    name = legend_label,
+    limits = color_limits
   ) +
-  geom_text(aes(label = significance), color = "black", size = 4, vjust = 0.7, na.rm = TRUE, show.legend = FALSE) +
+  geom_text(
+    aes(label = significance),
+    color = "black",
+    size = 4,
+    vjust = 0.7,
+    na.rm = TRUE,
+    show.legend = FALSE
+  ) +
   labs(
     title = plot_title_names,
-    x = NULL, y = "Metric",
-    caption = "* <= 0.05, ** <= 0.01, *** <= 0.001"
+    x = NULL,
+    y = "Metric",
+    caption = caption_text
   ) +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1, size = 10, face = "bold"),
@@ -53,10 +67,13 @@ plot <- ggplot(data_df, aes(x = comparison, y = metric)) +
     legend.title = element_text(colour = "black", size = 10, face = "bold"),
     legend.text = element_text(colour = "black", size = 10, face = "italic"),
     plot.caption = element_text(face = "bold"),
-    plot.title = element_text(size = 14, hjust = 0.5, face = "bold", color = "black")
+    plot.title = element_text(
+      size = 14,
+      hjust = 0.5,
+      face = "bold",
+      color = "black"
+    )
   )
-
-
 
 
 # Save the plot

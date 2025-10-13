@@ -54,7 +54,7 @@ repos:
     hooks:
       - id: style-files
         name: styler (R)              # auto-format R code to tidyverse style
-        stages: [pre-commit]
+        stages: [manual]              # run styler manually due to performance
         language: system              # <--- ADD THIS LINE
       - id: lintr
         name: lintr (R)               # lint R code for style & errors

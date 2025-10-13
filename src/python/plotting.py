@@ -13,12 +13,11 @@ def plot_heatmap_of_alpha_diversity(
     output_file: str,
 ) -> None:
     """
-    Plots a heatmap of differential abundance analysis results using ggplot2 in R.
+    Plots a heatmap of alpha diversity analysis results using z-score scaled differences.
 
     Args:
-        daa_df (pd.DataFrame): DataFrame containing differential abundance analysis results.
-        metadata (pd.DataFrame): Metadata for samples.
-        primary_variable (str): Primary variable for grouping samples.
+        data_df (pd.DataFrame): DataFrame containing alpha diversity analysis results.
+        title_dict (dict[str, str]): Dictionary containing plot titles and metadata.
         output_file (str): Path to save the output heatmap image.
     """
 

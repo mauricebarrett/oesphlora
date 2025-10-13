@@ -11,6 +11,7 @@ from biom.table import Table  # type: ignore
 
 from python.beta_diversity_analysis import (
     calculate_bray_curtis_distance,
+    calculate_generalized_unifrac_distance,
     calculate_jaccard_distance,
     calculate_unweighted_unifrac_distance,
     perform_pairwise_comparisons_permanova,
@@ -21,16 +22,18 @@ from python.beta_diversity_analysis import (
 from python.differential_abundance_analysis import (
     create_taxa_tables,
     linda_daa_asv,
+    linda_daa_picrust2,
     linda_daa_taxon,
 )
 from python.diversity_analysis import (
     calculate_alpha_diversity,
     convert_dataframe_to_qiime2_artifact,
     generate_phylogenetic_tree_with_qiime2,
-    pairwise_alpha_diversity_calculations,
+    paired_alpha_diversity_calculations,
     perform_ctf,
     perform_nmds,
     rarefy_df,
+    unpaired_alpha_diversity_calculations,
 )
 from python.plotting import (
     plot_biplot_with_ggplot2,
@@ -264,17 +267,43 @@ def main():
     # 1.1.1 Quality control on demultiplexed FASTQ files
     ####################################################
 
-    # Loop through each fastq file in the demux_dir and gather qc with count_nreads_fastq
-    for fastq_file in Path(demux_dir).glob("*.fastq.gz"):
-        base_name = fastq_file.name.replace(".fastq.gz", "")
+    # Check if demultiplexed QC directory exists and has files
+    demux_qc_dir = os.path.join(wor_dir, "qc", "demultiplexed")
 
-        print(f"Processing file: {base_name}")
+    if os.path.exists(demux_qc_dir):
+        existing_qc_files = list(Path(demux_qc_dir).glob("*"))
+        if existing_qc_files:
+            print(
+                f"Demultiplexed QC directory already contains {len(existing_qc_files)} files. Skipping demultiplexed QC."
+            )
+        else:
+            print(
+                "Demultiplexed QC directory exists but is empty. Running demultiplexed QC..."
+            )
+            # Loop through each fastq file in the demux_dir and gather qc with count_nreads_fastq
+            for fastq_file in Path(demux_dir).glob("*.fastq.gz"):
+                base_name = fastq_file.name.replace(".fastq.gz", "")
 
-        # define output directory for QC results
-        out_dir = os.path.join(wor_dir, "qc", "demultiplexed", base_name)
+                print(f"Processing file: {base_name}")
 
-        fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
-    print("Finished quality control for demultiplexed FASTQ files.")
+                # define output directory for QC results
+                out_dir = os.path.join(wor_dir, "qc", "demultiplexed", base_name)
+
+                fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
+            print("Finished quality control for demultiplexed FASTQ files.")
+    else:
+        print("Demultiplexed QC directory doesn't exist. Running demultiplexed QC...")
+        # Loop through each fastq file in the demux_dir and gather qc with count_nreads_fastq
+        for fastq_file in Path(demux_dir).glob("*.fastq.gz"):
+            base_name = fastq_file.name.replace(".fastq.gz", "")
+
+            print(f"Processing file: {base_name}")
+
+            # define output directory for QC results
+            out_dir = os.path.join(wor_dir, "qc", "demultiplexed", base_name)
+
+            fastq_qc(fastq_file=fastq_file, threads=threads, out_dir=out_dir)
+        print("Finished quality control for demultiplexed FASTQ files.")
 
     #####################################################
     # 1.1.2 Primer removal from demultiplexed FASTQ files
@@ -569,9 +598,9 @@ def main():
         pathway_dfs[name] = df
 
     # Extract individual DataFrames
-    # kegg_pathways_df = pathway_dfs["KO"]
-    # enzyme_commission_df = pathway_dfs["EC"]
-    # metabolic_pathways_df = pathway_dfs["MetaCyc"]
+    kegg_pathways_df = pathway_dfs["KO"]
+    enzyme_commission_df = pathway_dfs["EC"]
+    metabolic_pathways_df = pathway_dfs["MetaCyc"]
 
     ###############################
     # 2.6 Phylogenetic tree
@@ -588,10 +617,6 @@ def main():
             input_fasta=rep_seq_fasta, threads=threads, output_dir=phylo_dir
         )
     )
-
-    print(rooted_tree)
-    print(unrooted_tree)
-    print(rooted_tree_newick_path)
 
     # rarify the ASV table
     asv_table_rarefied = rarefy_df(
@@ -616,13 +641,22 @@ def main():
         "alpha_diversity_metrics.csv",
     )
 
-    # Calculate alpha diversity metrics
-    alpha_diversity_df = calculate_alpha_diversity(
-        normalized_table_df=asv_table_rarefied,
-        normalized_table_qza=rarefied_table_qza,
-        rooted_tree=rooted_tree,
-        output_file=alpha_diversity_file,
-    )
+    if os.path.exists(alpha_diversity_file):
+        print(
+            f"Alpha diversity metrics file already exists at {alpha_diversity_file}. Skipping alpha diversity calculations."
+        )
+        alpha_diversity_df = pd.read_csv(alpha_diversity_file)
+    else:
+        print("Calculating alpha diversity metrics...")
+
+        # Calculate alpha diversity metrics
+        alpha_diversity_df = calculate_alpha_diversity(
+            normalized_table_df=asv_table_rarefied,
+            normalized_table_qza=rarefied_table_qza,
+            rooted_tree=rooted_tree,
+            output_file=alpha_diversity_file,
+        )
+        print(f"Alpha diversity metrics saved to {alpha_diversity_file}")
 
     #######################################################################
     #######################################################################
@@ -759,7 +793,7 @@ def main():
         # Path to file to save alpha diversity figures
         alpha_diversity_figure_file = os.path.join(
             diagnosis_alpha_fig_dir,
-            f"alpha_diversity_metrics_diagnosis_{diagnosis}.pdf",
+            f"alpha_diversity_metrics_location_comparison_{diagnosis}.pdf",
         )
 
         # Subset the alpha diversity DataFrame for the current diagnosis
@@ -767,17 +801,16 @@ def main():
             alpha_diversity_df["sample_id"].isin(diagnosis_df.index)
         ]
 
-        # Path to save alpha diversity metrics per diagnosis
+        # Path results of statiscal comparisons of alpha diversity between locations per diagnosis
         alpha_diversity_diagnosis_file = os.path.join(
-            div_met_dir,
+            alpha_div_dir,
             "results",
-            "diagnosis",
-            diagnosis,
-            f"alpha_diversity_metrics_diagnosis_{diagnosis}.csv",
+            "location",
+            f"alpha_diversity_location_comparison_{diagnosis}.csv",
         )
 
         # Calculate differences in alpha diversity between locations
-        alpha_diversity_results_df = pairwise_alpha_diversity_calculations(
+        alpha_diversity_results_df = paired_alpha_diversity_calculations(
             alpha_diversity_df=alpha_diversity_diagnosis_df,
             metadata_df=diagnosis_df,
             primary_variable="sample_location",
@@ -816,60 +849,65 @@ def main():
         # Path to figures directory for Jaccard results comparing locations per diagnosis
         jaccard_fig_location_dir = os.path.join(beta_fig_location_dir, "jaccard")
 
-        # Path to Jaccard distance matrix comparing locations per diagnosis
-        jaccard_distance_matrix_file = os.path.join(
-            jaccard_dir, f"jaccard_distance_matrix_diagnosis_{diagnosis}.csv"
-        )
-
-        # Calculate Jaccard distance
-        jaccard_df, jaccard_dm = calculate_jaccard_distance(
-            rarefied_table_df=rarefied_df,
-            output_file=jaccard_distance_matrix_file,
-        )
-
-        # Perform pairwise comparisons with vegan on the Jaccard distance matrix
-        perform_pairwise_comparisons_permanova(
-            metadata=diagnosis_df,
-            distance_df=jaccard_df,
-            primary_variable="sample_location",
-            output_file=os.path.join(
-                jaccard_dir,
-                f"jaccard_pairwise_comparisons_diagnosis_{diagnosis}.csv",
-            ),
-        )
-
-        # Perform permanova  with vegan on the Jaccard distance matrix
-        permanova_results_dict = perform_permanova_with_vegan(
-            metadata=diagnosis_df,
-            distance_df=jaccard_df,
-            primary_variable="sample_location",
-        )
-
-        # Perform NMDS on the Jaccard distance matrix
-        coordinates_df, normalized_stress = perform_nmds(distance_matrix=jaccard_dm)
-
         # Path to NMDS plot file comparing locations per diagnosis
         nmds_plot_file_path = os.path.join(
             jaccard_fig_location_dir,
-            f"jaccard_nmds_plot_diagnosis_{diagnosis}.pdf",
+            f"jaccard_nmds_plot_comparing_locations_{diagnosis}.pdf",
         )
 
-        # Define a title dictionary for the NMDS plot
-        title_dict = {
-            "primary_variable": "sample_location",
-            "title": f"NMDS Plot of Jaccard distances for {diagnosis} Patients",
-            "stress": normalized_stress,
-        }
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Jaccard NMDS plot already exists at {nmds_plot_file_path}. Skipping Jaccard analysis for {diagnosis}."
+            )
+        else:
+            print(f"Calculating Jaccard distances foqr {diagnosis}...")
+            # Path to Jaccard distance matrix comparing locations per diagnosis
+            jaccard_distance_matrix_file = os.path.join(
+                jaccard_dir,
+                f"jaccard_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
 
-        plot_nmds_with_ggplot2(
-            nmds_coordinates=coordinates_df,
-            metadata=diagnosis_df,
-            permanova_results=permanova_results_dict,
-            title_dict=title_dict,
-            output_file=nmds_plot_file_path,
-        )
+            # Calculate Jaccard distance
+            jaccard_df, jaccard_dm = calculate_jaccard_distance(
+                rarefied_table_df=rarefied_df,
+                output_file=jaccard_distance_matrix_file,
+            )
 
-        print(f"NMDS plot saved to {nmds_plot_file_path}")
+            # Perform pairwise comparisons with vegan on the Jaccard distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=diagnosis_df,
+                distance_df=jaccard_df,
+                primary_variable="sample_location",
+                output_file=os.path.join(
+                    jaccard_dir,
+                    f"jaccard_pairwise_comparisons_between_locations_{diagnosis}.csv",
+                ),
+            )
+
+            # Perform permanova  with vegan on the Jaccard distance matrix
+            permanova_results_dict = perform_permanova_with_vegan(
+                metadata=diagnosis_df,
+                distance_df=jaccard_df,
+                primary_variable="sample_location",
+            )
+
+            # Perform NMDS on the Jaccard distance matrix
+            coordinates_df, normalized_stress = perform_nmds(distance_matrix=jaccard_dm)
+
+            # Define a title dictionary for the NMDS plot
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"NMDS Plot of Jaccard distances comparing locations in {diagnosis} Patients",
+                "stress": normalized_stress,
+            }
+
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=diagnosis_df,
+                permanova_results=permanova_results_dict,
+                title_dict=title_dict,
+                output_file=nmds_plot_file_path,
+            )
 
         ########################
         # 3.2.3.2 Bray-Curtis
@@ -886,56 +924,63 @@ def main():
         # Path to NMDS plot file comparing locations per diagnosis
         nmds_plot_file_path = os.path.join(
             bray_curtis_fig_location_dir,
-            f"bray_curtis_nmds_plot_diagnosis_{diagnosis}.pdf",
+            f"bray_curtis_nmds_plot_comparing_locations_{diagnosis}.pdf",
         )
 
-        # Path to Bray-Curtis distance matrix comparing locations per diagnosis
-        bray_curtis_distance_matrix_file = os.path.join(
-            bray_curtis_location_dir,
-            f"bray_curtis_distance_matrix_diagnosis_{diagnosis}.csv",
-        )
-
-        # Perform Bray-Curtis distance calculation
-        bray_curtis_df, bray_curtis_dm = calculate_bray_curtis_distance(
-            rarefied_table_df=rarefied_df,
-            output_file=bray_curtis_distance_matrix_file,
-        )
-
-        results_dict = perform_permanova_with_vegan(
-            metadata=diagnosis_df,
-            distance_df=bray_curtis_df,
-            primary_variable="sample_location",
-        )
-
-        # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
-        perform_pairwise_comparisons_permanova(
-            metadata=diagnosis_df,
-            distance_df=bray_curtis_df,
-            primary_variable="sample_location",
-            output_file=os.path.join(
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Bray-Curtis NMDS plot already exists at {nmds_plot_file_path}. Skipping Bray-Curtis analysis for {diagnosis}."
+            )
+        else:
+            print(f"Calculating Bray-Curtis distances for {diagnosis}...")
+            # Path to Bray-Curtis distance matrix comparing locations per diagnosis
+            bray_curtis_distance_matrix_file = os.path.join(
                 bray_curtis_location_dir,
-                f"bray_curtis_pairwise_comparisons_diagnosis_{diagnosis}.csv",
-            ),
-        )
+                f"bray_curtis_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
 
-        # Perform NMDS on the Bray-Curtis distance matrix
-        coordinates_df, normalized_stress = perform_nmds(distance_matrix=bray_curtis_dm)
+            # Perform Bray-Curtis distance calculation
+            bray_curtis_df, bray_curtis_dm = calculate_bray_curtis_distance(
+                rarefied_table_df=rarefied_df,
+                output_file=bray_curtis_distance_matrix_file,
+            )
 
-        # Define a title dictionary for the NMDS plot
-        title_dict = {
-            "primary_variable": "sample_location",
-            "title": f"NMDS Plot of Bray-Curtis distances for {diagnosis} Patients",
-            "stress": normalized_stress,
-        }
+            results_dict = perform_permanova_with_vegan(
+                metadata=diagnosis_df,
+                distance_df=bray_curtis_df,
+                primary_variable="sample_location",
+            )
 
-        plot_nmds_with_ggplot2(
-            nmds_coordinates=coordinates_df,
-            metadata=diagnosis_df,
-            title_dict=title_dict,
-            permanova_results=results_dict,
-            output_file=nmds_plot_file_path,
-        )
-        print(f"NMDS plot saved to {nmds_plot_file_path}")
+            # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=diagnosis_df,
+                distance_df=bray_curtis_df,
+                primary_variable="sample_location",
+                output_file=os.path.join(
+                    bray_curtis_location_dir,
+                    f"bray_curtis_pairwise_comparisons_comparing_locations_{diagnosis}.csv",
+                ),
+            )
+
+            # Perform NMDS on the Bray-Curtis distance matrix
+            coordinates_df, normalized_stress = perform_nmds(
+                distance_matrix=bray_curtis_dm
+            )
+
+            # Define a title dictionary for the NMDS plot
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"NMDS Plot of Bray-Curtis distances comparing locations in {diagnosis} Patients",
+                "stress": normalized_stress,
+            }
+
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=diagnosis_df,
+                title_dict=title_dict,
+                permanova_results=results_dict,
+                output_file=nmds_plot_file_path,
+            )
 
         ###############################
         # 3.2.3.3 Robust Aitchison PCA
@@ -949,54 +994,59 @@ def main():
 
         # Path to RPCA biplot file comparing locations per diagnosis
         rpca_biplot_file = os.path.join(
-            rpca_fig_location_dir, f"rpca_biplot_diagnosis_{diagnosis}.pdf"
+            rpca_fig_location_dir, f"rpca_biplot_comparing_locations_{diagnosis}.pdf"
         )
 
-        # Path to RPCA distance matrix comparing locations per diagnosis
-        rpca_distance_matrix_file = os.path.join(
-            rpca_location_dir, f"rpca_diagnosis_{diagnosis}_distance_matrix.csv"
-        )
-
-        # Perform RPCA
-        rpca_ordination_results, robust_aitchison_distance_df = perform_rpca(
-            asv_table_df=asv_table_diagnosis,
-            output_file=rpca_distance_matrix_file,
-        )
-
-        # Perform pairwise comparisons with vegan on the RPCA distance matrix
-        perform_pairwise_comparisons_permanova(
-            metadata=diagnosis_df,
-            distance_df=robust_aitchison_distance_df,
-            primary_variable="sample_location",
-            output_file=os.path.join(
+        if os.path.exists(rpca_biplot_file):
+            print(
+                f"RPCA biplot already exists at {rpca_biplot_file}. Skipping RPCA analysis for {diagnosis}."
+            )
+        else:
+            # Path to RPCA distance matrix comparing locations per diagnosis
+            rpca_distance_matrix_file = os.path.join(
                 rpca_location_dir,
-                f"rpca_pairwise_comparisons_diagnosis_{diagnosis}.csv",
-            ),
-        )
+                f"rpca_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
 
-        # Perform permanova  with vegan on the RPCA distance matrix
-        permanova_results = perform_permanova_with_vegan(
-            metadata=diagnosis_df,
-            distance_df=robust_aitchison_distance_df,
-            primary_variable="sample_location",
-        )
+            # Perform RPCA
+            rpca_ordination_results, robust_aitchison_distance_df = perform_rpca(
+                asv_table_df=asv_table_diagnosis,
+                output_file=rpca_distance_matrix_file,
+            )
 
-        # Create dict for title and primary variable
-        title_dict = {
-            "primary_variable": "sample_location",
-            "title": f"RPCA Biplot of Locations for {diagnosis} Patients",
-        }
+            # Perform pairwise comparisons with vegan on the RPCA distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=diagnosis_df,
+                distance_df=robust_aitchison_distance_df,
+                primary_variable="sample_location",
+                output_file=os.path.join(
+                    rpca_location_dir,
+                    f"rpca_pairwise_comparisons_between_locations_{diagnosis}.csv",
+                ),
+            )
 
-        # Plot RPCA biplot
-        plot_biplot_with_ggplot2(
-            ordination_results=rpca_ordination_results,
-            metadata=diagnosis_df,
-            permanova_results=permanova_results,
-            taxonomy_table=taxonomy_df,
-            title_dict=title_dict,
-            output_file=rpca_biplot_file,
-        )
-        print(f"RPCA biplot saved to {rpca_biplot_file}")
+            # Perform permanova  with vegan on the RPCA distance matrix
+            permanova_results = perform_permanova_with_vegan(
+                metadata=diagnosis_df,
+                distance_df=robust_aitchison_distance_df,
+                primary_variable="sample_location",
+            )
+
+            # Create dict for title and primary variable
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"RPCA Biplot comparing locations for {diagnosis} Patients",
+            }
+
+            # Plot RPCA biplot
+            plot_biplot_with_ggplot2(
+                ordination_results=rpca_ordination_results,
+                metadata=diagnosis_df,
+                permanova_results=permanova_results,
+                taxonomy_table=taxonomy_df,
+                title_dict=title_dict,
+                output_file=rpca_biplot_file,
+            )
 
         ############################################
         # 3.2.3.4  Phylogenetic robust Aitchison PCA
@@ -1011,109 +1061,381 @@ def main():
         # Path to Phylogenetic RPCA biplot file comparing locations per diagnosis
         phylo_rpca_biplot_file = os.path.join(
             phylo_rpca_fig_location_dir,
-            f"phylo_rpca_biplot_diagnosis_{diagnosis}.pdf",
+            f"phylo_rpca_biplot_comparing_locations_{diagnosis}.pdf",
         )
 
-        # Path to Phylogenetic RPCA distance matrix comparing locations per diagnosis
-        phylo_rpca_distance_matrix_file = os.path.join(
-            phylo_rpca_location_dir,
-            f"phylo_rpca_diagnosis_{diagnosis}_distance_matrix.csv",
-        )
+        if os.path.exists(phylo_rpca_biplot_file):
+            print(
+                f"Phylogenetic RPCA biplot already exists at {phylo_rpca_biplot_file}. Skipping Phylogenetic RPCA analysis for {diagnosis}."
+            )
+        else:
+            print(f"Calculating Phylogenetic RPCA for {diagnosis}...")
 
-        # Perform Phylogenetic RPCA
-
-        (
-            phylo_rpca_ordination,
-            phylo_rpca_distance_df,
-            pruned_tree,
-            filtered_table,
-            filtered_taxonomy,
-        ) = perform_phylogenetic_rpca(
-            asv_table_df=asv_table_diagnosis,
-            taxonomy_df=taxonomy_df,
-            rooted_tree_newick_path=rooted_tree_newick_path,
-            output_file=phylo_rpca_distance_matrix_file,
-        )
-
-        # Perform pairwise comparisons with vegan on the Phylogenetic RPCA distance matrix
-        perform_pairwise_comparisons_permanova(
-            metadata=diagnosis_df,
-            distance_df=phylo_rpca_distance_df,
-            primary_variable="sample_location",
-            output_file=os.path.join(
+            # Path to Phylogenetic RPCA distance matrix comparing locations per diagnosis
+            phylo_rpca_distance_matrix_file = os.path.join(
                 phylo_rpca_location_dir,
-                f"phylo_rpca_pairwise_comparisons_diagnosis_{diagnosis}.csv",
-            ),
+                f"phylo_rpca_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
+
+            # Perform Phylogenetic RPCA
+
+            (
+                phylo_rpca_ordination,
+                phylo_rpca_distance_df,
+                pruned_tree,
+                filtered_table,
+                filtered_taxonomy,
+            ) = perform_phylogenetic_rpca(
+                asv_table_df=asv_table_diagnosis,
+                taxonomy_df=taxonomy_df,
+                rooted_tree_newick_path=rooted_tree_newick_path,
+                output_file=phylo_rpca_distance_matrix_file,
+            )
+
+            # Perform pairwise comparisons with vegan on the Phylogenetic RPCA distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=diagnosis_df,
+                distance_df=phylo_rpca_distance_df,
+                primary_variable="sample_location",
+                output_file=os.path.join(
+                    phylo_rpca_location_dir,
+                    f"phylo_rpca_pairwise_comparisons_between_locations_{diagnosis}.csv",
+                ),
+            )
+
+            # Perform permanova  with vegan on the Phylogenetic RPCA distance matrix
+            permanova_results = perform_permanova_with_vegan(
+                metadata=diagnosis_df,
+                distance_df=phylo_rpca_distance_df,
+                primary_variable="sample_location",
+            )
+
+            # Create dict for title and primary variable
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"Phylogenetic RPCA Biplot comparing locations for {diagnosis} Patients",
+            }
+
+            # Plot Phylogenetic RPCA biplot
+            plot_biplot_with_ggplot2(
+                ordination_results=phylo_rpca_ordination,
+                metadata=diagnosis_df,
+                permanova_results=permanova_results,
+                taxonomy_table=taxonomy_df,
+                title_dict=title_dict,
+                output_file=phylo_rpca_biplot_file,
+            )
+
+        ##############################
+        # 3.2.3.5  Unweighted UniFrac
+        ##############################
+
+        # Path to Unweighted UniFrac directory
+        unweighted_unifrac_location_dir = os.path.join(
+            beta_div_location_dir, "unweighted_unifrac"
         )
 
-        # Perform permanova  with vegan on the Phylogenetic RPCA distance matrix
-        permanova_results = perform_permanova_with_vegan(
-            metadata=diagnosis_df,
-            distance_df=phylo_rpca_distance_df,
-            primary_variable="sample_location",
+        # Path to figures directory for Unweighted UniFrac results comparing locations per diagnosis
+        unweighted_unifrac_fig_location_dir = os.path.join(
+            beta_fig_location_dir, "unweighted_unifrac"
         )
 
-        # Create dict for title and primary variable
-        title_dict = {
-            "primary_variable": "sample_location",
-            "title": f"Phylogenetic RPCA Biplot of Locations for {diagnosis} Patients",
-        }
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Unweighted UniFrac NMDS plot already exists at {nmds_plot_file_path}. Skipping Unweighted UniFrac analysis for {diagnosis}."
+            )
+        else:
+            print(f"Calculating Unweighted UniFrac distances for {diagnosis}...")
 
-        # Plot Phylogenetic RPCA biplot
-        plot_biplot_with_ggplot2(
-            ordination_results=phylo_rpca_ordination,
-            metadata=diagnosis_df,
-            permanova_results=permanova_results,
-            taxonomy_table=taxonomy_df,
-            title_dict=title_dict,
-            output_file=phylo_rpca_biplot_file,
+            # Path to NMDS plot file comparing locations per diagnosis
+            nmds_plot_file_path = os.path.join(
+                unweighted_unifrac_fig_location_dir,
+                f"unweighted_unifrac_nmds_plot_comparing_locations_{diagnosis}.pdf",
+            )
+
+            # Path to Unweighted UniFrac distance matrix comparing locations per diagnosis
+            unweighted_unifrac_distance_matrix_file = os.path.join(
+                unweighted_unifrac_location_dir,
+                f"unweighted_unifrac_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
+
+            # Calculate Unweighted UniFrac distance
+            unweighted_unifrac_df, unweighted_unifrac_dm = (
+                calculate_unweighted_unifrac_distance(
+                    biom_table_path=biom_file_path,
+                    rooted_tree_newick_path=rooted_tree_newick_path,
+                    output_file=unweighted_unifrac_distance_matrix_file,
+                )
+            )
+
+            # Perform NMDS
+            coordinates_df, normalized_stress = perform_nmds(
+                distance_matrix=unweighted_unifrac_dm
+            )
+
+            # Perform pairwise comparisons with vegan on the Unweighted UniFrac distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=diagnosis_df,
+                distance_df=unweighted_unifrac_df,
+                primary_variable="sample_location",
+                output_file=os.path.join(
+                    unweighted_unifrac_location_dir,
+                    f"unweighted_unifrac_pairwise_comparisons_between_locations_{diagnosis}.csv",
+                ),
+            )
+
+            # Perform permanova  with vegan on the Unweighted UniFrac distance matrix
+            results_dict = perform_permanova_with_vegan(
+                metadata=diagnosis_df,
+                distance_df=unweighted_unifrac_df,
+                primary_variable="sample_location",
+            )
+
+            # Create NMDS plot
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"NMDS Plot of Unweighted UniFrac distances comparing locations in {diagnosis} Patients",
+                "stress": normalized_stress,
+            }
+
+            # Plot NMDS
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=diagnosis_df,
+                permanova_results=results_dict,
+                title_dict=title_dict,
+                output_file=nmds_plot_file_path,
+            )
+
+        ###############################
+        # 3.2.3.5  Generalized UniFrac
+        ##############################
+
+        # Path to Generalized UniFrac directory
+        generalized_unifrac_location_dir = os.path.join(
+            beta_div_location_dir, "generalized_unifrac"
         )
 
-        print(f"Phylogenetic RPCA biplot saved to {phylo_rpca_biplot_file}")
-
-    ##############################
-    # 3.2.3.4  Unweighted UniFrac
-    ##############################
-
-    # Path to Unweighted UniFrac directory
-    unweighted_unifrac_location_dir = os.path.join(
-        beta_div_location_dir, "unweighted_unifrac"
-    )
-
-    # Path to figures directory for Unweighted UniFrac results comparing locations per diagnosis
-    unweighted_unifrac_fig_location_dir = os.path.join(
-        beta_fig_location_dir, "unweighted_unifrac"
-    )
-
-    # Path to NMDS plot file comparing locations per diagnosis
-    nmds_plot_file_path = os.path.join(
-        unweighted_unifrac_fig_location_dir,
-        f"unweighted_unifrac_nmds_plot_diagnosis_{diagnosis}.pdf",
-    )
-
-    # Path to Unweighted UniFrac distance matrix comparing locations per diagnosis
-    unweighted_unifrac_distance_matrix_file = os.path.join(
-        unweighted_unifrac_location_dir,
-        f"unweighted_unifrac_distance_matrix_diagnosis_{diagnosis}.csv",
-    )
-
-    # Calculate Unweighted UniFrac distance
-    unweighted_unifrac_df, unweighted_unifrac_dm = (
-        calculate_unweighted_unifrac_distance(
-            biom_table_path=biom_file_path,
-            rooted_tree_newick_path=rooted_tree_newick_path,
-            output_file=unweighted_unifrac_distance_matrix_file,
+        # Path to figures directory for Generalized UniFrac results comparing locations per diagnosis
+        generalized_unifrac_fig_location_dir = os.path.join(
+            beta_fig_location_dir, "generalized_unifrac"
         )
-    )
 
-    # Perform NMDS
-    coordinates_df, normalized_stress = perform_nmds(
-        distance_matrix=unweighted_unifrac_dm
-    )
+        # Path to NMDS plot file comparing locations per diagnosis
+        nmds_plot_file_path = os.path.join(
+            generalized_unifrac_fig_location_dir,
+            f"generalized_unifrac_nmds_plot_comparing_locations_{diagnosis}.pdf",
+        )
 
-    #############################################################################################################
-    ################################ Split data by sample location ##############################################
-    #############################################################################################################
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Generalized UniFrac NMDS plot already exists at {nmds_plot_file_path}. Skipping Generalized UniFrac analysis for {diagnosis}."
+            )
+        else:
+            print(f"Calculating Generalized UniFrac distances for {diagnosis}...")
+
+            # Path to Generalized UniFrac distance matrix comparing locations per diagnosis
+            generalized_unifrac_distance_matrix_file = os.path.join(
+                generalized_unifrac_location_dir,
+                f"generalized_unifrac_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
+
+            # Calculate Generalized UniFrac distance
+            generalized_unifrac_df, generalized_unifrac_dm = (
+                calculate_generalized_unifrac_distance(
+                    biom_table_path=biom_file_path,
+                    rooted_tree_newick_path=rooted_tree_newick_path,
+                    output_file=generalized_unifrac_distance_matrix_file,
+                )
+            )
+
+            # Perform NMDS
+            coordinates_df, normalized_stress = perform_nmds(
+                distance_matrix=generalized_unifrac_dm
+            )
+
+            # Perform pairwise comparisons with vegan on the Generalized UniFrac distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=diagnosis_df,
+                distance_df=generalized_unifrac_df,
+                primary_variable="sample_location",
+                output_file=os.path.join(
+                    generalized_unifrac_location_dir,
+                    f"generalized_unifrac_pairwise_comparisons_between_locations_{diagnosis}.csv",
+                ),
+            )
+
+            # Perform permanova  with vegan on the Generalized UniFrac distance matrix
+            results_dict = perform_permanova_with_vegan(
+                metadata=diagnosis_df,
+                distance_df=generalized_unifrac_df,
+                primary_variable="sample_location",
+            )
+
+            # Create NMDS plot
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"NMDS Plot of Generalized UniFrac distances comparing locations in {diagnosis} Patients",
+                "stress": normalized_stress,
+            }
+
+            # Plot NMDS
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=diagnosis_df,
+                permanova_results=results_dict,
+                title_dict=title_dict,
+                output_file=nmds_plot_file_path,
+            )
+
+        ##############################################################
+        # 3.2.4 Differential abundance between locations per diagnosis
+        ##############################################################
+
+        # Define directory for differential abundance results
+        daa_dir = os.path.join(wor_dir, "differential_abundance_analysis")
+
+        # Path to DAA results directory comparing locations per diagnosis
+        location_daa_dir = os.path.join(daa_dir, "location")
+
+        # Path to DAA figures directory
+        daa_fig_dir = os.path.join(fig_dir, "differential_abundance_analysis")
+
+        # Path to DAA figures directory for comparing locations per diagnosis
+        location_daa_fig_dir = os.path.join(daa_fig_dir, "location")
+
+        ####################
+        # ASV level analysis
+        ####################
+
+        # Path to DAA figures directory for ASV level analysis comparing locations per diagnosis
+        diagnosis_daa_asv_fig_dir = os.path.join(location_daa_fig_dir, "asv_level")
+
+        # Figure path to save the DAA plot
+        daa_asv_plot_file = os.path.join(
+            diagnosis_daa_asv_fig_dir, f"daa_asv_heatmap_diagnosis_{diagnosis}.pdf"
+        )
+
+        if os.path.exists(daa_asv_plot_file):
+            print(
+                f"DAA at the ASV level for comparing locations for {diagnosis} already done. Skipping ASV level analysis."
+            )
+        else:
+            print(f"Performing DAA at the ASV level for {diagnosis}...")
+
+            # Path to DAA results directory for ASV level analysis comparing locations per diagnosis
+            location_daa_asv_level = os.path.join(location_daa_dir, "asv_level")
+
+            daa_file = os.path.join(
+                location_daa_asv_level,
+                f"differential_abundance_results_location_{diagnosis}.csv",
+            )
+
+            # Run LINDA analysis
+            daa_results_taxa_fil_df = linda_daa_asv(
+                asv_table=asv_table_diagnosis,
+                metadata=diagnosis_df,
+                primary_variable="sample_location",
+                taxonomy_table=taxonomy_df,
+                output_file=daa_file,
+                threshold=5,
+                pairwise=True,
+            )
+
+            # Plot the DAA results
+            print("Plotting DAA results for ASVs...")
+
+            # constitute title dictionary for the plot
+            title_dict = {
+                "primary_variable": "sample_location",
+                "title": f"DAA Results for ASVs in {diagnosis} Patients",
+            }
+
+            plot_heatmap_of_daa(
+                daa_df=daa_results_taxa_fil_df,
+                title_dict=title_dict,
+                output_file=daa_asv_plot_file,
+                asv=True,  # Set asv to True for ASV level analysis
+            )
+
+        ########################
+        # Taxa level analysis
+        ########################
+
+        # Taxonomic ranks to process
+        ranks = ["species", "genus", "family", "order", "class", "phylum"]
+
+        for rank in ranks:
+            print(f"Processing taxonomic rank: {rank}")
+
+            rank_daa_plot_file = os.path.join(
+                location_daa_fig_dir,
+                f"{rank}_level",
+                f"daa_{rank}_heatmap_location_{diagnosis}.pdf",
+            )
+
+            if os.path.exists(rank_daa_plot_file):
+                print(
+                    f"DAA at the {rank} level for comparing locations for {diagnosis} already done. Skipping {rank} level analysis."
+                )
+            else:
+                location_daa_rank_level = os.path.join(
+                    location_daa_dir, f"{rank}_level"
+                )
+
+                # Define output file for DAA results
+                daa_rank_file = os.path.join(
+                    location_daa_rank_level,
+                    f"daa_{rank}_results_location_{diagnosis}.csv",
+                )
+
+                # Define output file path for taxa tables
+                taxa_tables_file = os.path.join(
+                    wor_dir, "tables", "taxa_tables", f"{rank}_table.csv"
+                )
+
+                # Create taxa tables
+                taxa_table_df = create_taxa_tables(
+                    asv_table_df,
+                    taxonomy_df,
+                    rank=rank,
+                    output_file=taxa_tables_file,
+                )
+
+                taxon_daa_results_fil_df = linda_daa_taxon(
+                    taxon_table_df=taxa_table_df,
+                    metadata_df=diagnosis_df,
+                    primary_variable="sample_location",
+                    pairwise=True,
+                    threshold=5,
+                    output_file=daa_rank_file,
+                )
+
+                # Plot the DAA results
+                print(f"Plotting DAA results for {rank} level...")
+
+                # constitute title dictionary for the plot
+                title_dict = {
+                    "primary_variable": "sample_location",
+                    "title": f"DAA between Locations at {rank} level for {diagnosis} Patients",
+                }
+
+                plot_heatmap_of_daa(
+                    daa_df=taxon_daa_results_fil_df,
+                    title_dict=title_dict,
+                    output_file=rank_daa_plot_file,
+                    asv=False,  # Set asv to False for taxonomic level analysis
+                )
+
+        print(f"Finished all analyses for diagnosis: {diagnosis}")
+
+    print("Finished all diagnoses analyses.")
+
+    ########################################################
+    ########################################################
+    # 3.3 Comparative analysis between diagnoses per location
+    ########################################################
+    ########################################################
 
     locations = merged_df["sample_location"].unique()
 
@@ -1130,9 +1452,7 @@ def main():
         rarefied_df = rarefy_df(asv_table_location)
 
         # Define output file for the ASV table in BIOM format
-        biom_file_path = os.path.join(
-            asv_table_dir, f"asv_table_location_{location}.biom"
-        )
+        biom_file_path = os.path.join(asv_table_dir, f"asv_table_{location}.biom")
 
         # Convert to BIOM format
         convert_to_biom_format(
@@ -1151,26 +1471,51 @@ def main():
         # Alpha Diversity
         ######################
 
-        # # Subset the alpha diversity DataFrame for the current location
-        # alpha_diversity_location_df = alpha_diversity_df[
-        #     alpha_diversity_df["sample_id"].isin(location_df.index)
-        # ]
+        # Path to results for figures directory comparing diagnoses per location
+        diagnosis_alpha_fig_dir = os.path.join(alpha_fig_dir, "diagnosis")
 
-        # # Output file
-        # alpha_diversity_location_file = os.path.join(
-        #     wor_dir,
-        #     "figures",
-        #     "alpha_diversity",
-        #     f"alpha_diversity_metrics_location_{location}.pdf",
-        # )
+        # Path to file to save alpha diversity figures
+        alpha_diversity_figure_file = os.path.join(
+            diagnosis_alpha_fig_dir,
+            f"alpha_diversity_metrics_diagnosis_comparison_{location}.pdf",
+        )
 
-        # # Plot alpha diversity boxplots for the current location
-        # plot_alpha_diversity_boxplots_with_ggplot2(
-        #     alpha_diversity_df=alpha_diversity_location_df,
-        #     metadata=location_df,
-        #     primary_variable="Diagnosis",
-        #     output_file=alpha_diversity_location_file,
-        # )
+        if os.path.exists(alpha_diversity_figure_file):
+            print(
+                f"Alpha diversity figure already exists at {alpha_diversity_figure_file}. Skipping alpha diversity analysis for {location}."
+            )
+        else:
+            print(f"Calculating alpha diversity for {location}...")
+
+            # Subset the alpha diversity DataFrame for the current location
+            alpha_diversity_location_df = alpha_diversity_df[
+                alpha_diversity_df["sample_id"].isin(location_df.index)
+            ]
+
+            # Path to results of statiscal comparisons of alpha diversity between diagnoses per location
+            alpha_diversity_stats_results = os.path.join(
+                alpha_div_dir,
+                "results",
+                "diagnosis",
+                f"alpha_diversity_diagnosis_comparison_{location}.csv",
+            )
+
+            # Calculate differences in alpha diversity between diagnoses
+            alpha_diversity_results_df = unpaired_alpha_diversity_calculations(
+                alpha_diversity_df=alpha_diversity_location_df,
+                metadata_df=location_df,
+                primary_variable="Diagnosis",
+                output_file=alpha_diversity_stats_results,
+            )
+
+            plot_heatmap_of_alpha_diversity(
+                data_df=alpha_diversity_results_df,
+                title_dict={
+                    "primary_variable": "Diagnosis",
+                    "title": f"Alpha Diversity Comparison between Diagnoses for {location}",
+                },
+                output_file=alpha_diversity_figure_file,
+            )
 
         #####################
         # Beta Diversity
@@ -1182,12 +1527,80 @@ def main():
         # Path to beta diversity figures comparing diagnoses per location
         beta_fig_diagnosis_dir = os.path.join(beta_fig_dir, "diagnosis")
 
-        #############
-        # Bray-Curtis
-        #############
+        #############################
+        # 3.3.3.1 Jaccard
+        #############################
 
-        # Path to directory to results of Bray-Curtis comparing diagnoses per location
-        bray_curtis_diagnosis_dir = os.path.join(beta_div_diagnosis_dir, "bray_curtis")
+        # Path to Jaccard figures comparing diagnoses per location
+        jaccard_diagnosis_fig_dir = os.path.join(beta_fig_diagnosis_dir, "jaccard")
+
+        # Path to NMDS plot file comparing locations per diagnosis
+        nmds_plot_file_path = os.path.join(
+            jaccard_diagnosis_fig_dir,
+            f"jaccard_nmds_plot_comparing_diagnoses_{location}.pdf",
+        )
+
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Jaccard NMDS plot already exists at {nmds_plot_file_path}. Skipping Jaccard analysis for {location}."
+            )
+        else:
+            print(f"Calculating Jaccard distances for {location}...")
+
+            # Path to Jaccard directory
+            jaccard_diagnosis_dir = os.path.join(beta_div_diagnosis_dir, "jaccard")
+
+            # Path to Jaccard distance matrix comparing locations per diagnosis
+            jaccard_distance_matrix_file = os.path.join(
+                jaccard_diagnosis_dir,
+                f"jaccard_distance_matrix_comparing_diagnoses_{location}.csv",
+            )
+
+            # Calculate Jaccard distance
+            jaccard_df, jaccard_dm = calculate_jaccard_distance(
+                rarefied_table_df=rarefied_df,
+                output_file=jaccard_distance_matrix_file,
+            )
+
+            # Perform pairwise comparisons with vegan on the Jaccard distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=location_df,
+                distance_df=jaccard_df,
+                primary_variable="Diagnosis",
+                output_file=os.path.join(
+                    jaccard_diagnosis_dir,
+                    f"jaccard_pairwise_comparisons_between_diagnoses_{location}.csv",
+                ),
+            )
+
+            # Perform permanova  with vegan on the Jaccard distance matrix comparing diagnoses per location
+            permanova_results_dict = perform_permanova_with_vegan(
+                metadata=location_df,
+                distance_df=jaccard_df,
+                primary_variable="Diagnosis",
+            )
+
+            # Perform NMDS on the Jaccard distance matrix
+            coordinates_df, normalized_stress = perform_nmds(distance_matrix=jaccard_dm)
+
+            # Define a title dictionary for the NMDS plot
+            title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"NMDS Plot of Jaccard distances comparing Diagnoses for {location}",
+                "stress": normalized_stress,
+            }
+
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=diagnosis_df,
+                permanova_results=permanova_results_dict,
+                title_dict=title_dict,
+                output_file=nmds_plot_file_path,
+            )
+
+        #####################
+        # 3.3.3.2 Bray-Curtis
+        #####################
 
         # Path to Bray-Curtis figures comparing diagnoses per location
         beta_fig_diagnosis_bray_curtis_dir = os.path.join(
@@ -1197,265 +1610,390 @@ def main():
         # Define output file for NMDS plot
         nmds_plot_file_path = os.path.join(
             beta_fig_diagnosis_bray_curtis_dir,
-            f"bray_curtis_nmds_plot_location_{location}.pdf",
+            f"bray_curtis_nmds_plot_comparing_diagnoses_{location}.pdf",
         )
 
-        # Check if NMDS plot already exists
         if os.path.exists(nmds_plot_file_path):
             print(
-                f"NMDS plot already exists at {nmds_plot_file_path}. Skipping Bray-Curtis analysis."
+                f"Bray-Curtis NMDS plot already exists at {nmds_plot_file_path}. Skipping Bray-Curtis analysis for {location}."
             )
         else:
-            # Path to output file for Bray-Curtis distance matrix
-            bray_curtis_dist_file = os.path.join(
-                bray_curtis_diagnosis_dir, f"bray_curtis_distance_matrix_{location}.csv"
+            # Path to directory to results of Bray-Curtis comparing diagnoses per location
+            bray_curtis_diagnosis_dir = os.path.join(
+                beta_div_diagnosis_dir, "bray_curtis"
             )
 
-        # Perform Bray-Curtis distance calculation
-        bray_curtis_df, bray_curtis_dm = calculate_bray_curtis_distance(
-            rarefied_table_df=rarefied_df, output_file=bray_curtis_dist_file
+            # Path to output file for Bray-Curtis distance matrix
+            bray_curtis_dist_file = os.path.join(
+                bray_curtis_diagnosis_dir,
+                f"bray_curtis_distance_matrix_comparing_diagnoses_{location}.csv",
+            )
+
+            # Perform Bray-Curtis distance calculation
+            bray_curtis_df, bray_curtis_dm = calculate_bray_curtis_distance(
+                rarefied_table_df=rarefied_df, output_file=bray_curtis_dist_file
+            )
+
+            results_dict = perform_permanova_with_vegan(
+                metadata=location_df,
+                distance_df=bray_curtis_df,
+                primary_variable="Diagnosis",
+            )
+
+            # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=location_df,
+                distance_df=bray_curtis_df,
+                primary_variable="Diagnosis",
+                output_file=bray_curtis_dist_file,
+            )
+
+            # Perform NMDS on the Bray-Curtis distance matrix
+            coordinates_df, normalized_stress = perform_nmds(
+                distance_matrix=bray_curtis_dm
+            )
+
+            # Define a title dictionary for the NMDS plot
+            title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"NMDS Plot of Bray-Curtis distances comparing Diagnoses for {location}",
+                "stress": normalized_stress,
+            }
+
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=location_df,
+                title_dict=title_dict,
+                permanova_results=results_dict,
+                output_file=nmds_plot_file_path,
+            )
+            print(f"NMDS plot saved to {nmds_plot_file_path}")
+
+        ##############################
+        # 3.3.3.3 Robust Aitchison PCA
+        ##############################
+
+        # Path to figures directory for RPCA results comparing diagnoses per location
+        rpca_fig_diagnosis_dir = os.path.join(beta_fig_diagnosis_dir, "rpca")
+
+        rpca_biplot_file = os.path.join(
+            rpca_fig_diagnosis_dir, f"rpca_biplot_comparing_diagnoses_{location}.pdf"
         )
 
-        results_dict = perform_permanova_with_vegan(
-            metadata=location_df,
-            distance_df=bray_curtis_df,
-            primary_variable="Diagnosis",
+        if os.path.exists(rpca_biplot_file):
+            print(
+                f"RPCA biplot already exists at {rpca_biplot_file}. Skipping RPCA analysis for {location}."
+            )
+        else:
+            # Directory to results of Robust Aitchison PCA comparing diagnoses per location
+            rpca_dir = os.path.join(beta_div_diagnosis_dir, "rpca")
+
+            # define output file for RPCA distance matrix
+            rpca_distance_matrix_file = os.path.join(
+                rpca_dir, f"rpca_distance_matrix_comparing_diagnoses_{location}.csv"
+            )
+
+            # Perform RPCA
+            rpca_ordination_results, robust_aitchison_distance_df = perform_rpca(
+                asv_table_df=asv_table_location, output_file=rpca_distance_matrix_file
+            )
+
+            # Perform PERMANOVA on the RPCA distance matrix
+            rpca_results_dict = perform_permanova_with_vegan(
+                metadata=location_df,
+                distance_df=robust_aitchison_distance_df,
+                primary_variable="Diagnosis",
+            )
+
+            # Perform pairwise comparisons with vegan on the RPCA distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=location_df,
+                distance_df=robust_aitchison_distance_df,
+                primary_variable="Diagnosis",
+                output_file=os.path.join(
+                    rpca_dir,
+                    f"rpca_pairwise_comparisons_between_diagnoses_{location}.csv",
+                ),
+            )
+
+            # Create a title dictionary for the plot
+            title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"RPCA Biplot for location {location}",
+            }
+
+            plot_biplot_with_ggplot2(
+                ordination_results=rpca_ordination_results,
+                metadata=location_df,
+                title_dict=title_dict,
+                permanova_results=rpca_results_dict,
+                taxonomy_table=taxonomy_df,
+                output_file=rpca_biplot_file,
+            )
+
+        ############
+        # Phylo RPCA
+        ############
+
+        # Path to figures directory for Phylo RPCA results comparing diagnoses per location
+        phylo_rpca_fig_diagnosis_dir = os.path.join(
+            beta_fig_diagnosis_dir, "phylo_rpca"
         )
 
-        # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
-        perform_pairwise_comparisons_permanova(
-            metadata=location_df,
-            distance_df=bray_curtis_df,
-            primary_variable="Diagnosis",
-            output_file=bray_curtis_dist_file,
+        biplot_file = os.path.join(
+            phylo_rpca_fig_diagnosis_dir,
+            f"phylo_rpca_biplot_comparing_diagnoses_{location}.pdf",
         )
 
-        # Perform NMDS on the Bray-Curtis distance matrix
-        coordinates_df, normalized_stress = perform_nmds(distance_matrix=bray_curtis_dm)
+        if os.path.exists(biplot_file):
+            print(
+                f"Phylogenetic RPCA biplot already exists at {biplot_file}. Skipping Phylogenetic RPCA analysis for {location}."
+            )
+        else:
+            print(f"Calculating Phylogenetic RPCA for {location}...")
 
-        # Define a title dictionary for the NMDS plot
-        title_dict = {
-            "primary_variable": "Diagnosis",
-            "title": f"NMDS Plot of Bray-Curtis distances for location {location}",
-        }
+            # Path to directory to results of Phylogenetic Robust Aitchison PCA comparing diagnoses per location
+            phylo_rpca_dir = os.path.join(
+                beta_fig_diagnosis_dir, "phylogenetic_robust_aitchison_pca"
+            )
 
-        plot_nmds_with_ggplot2(
-            nmds_coordinates=coordinates_df,
-            metadata=location_df,
-            title_dict=title_dict,
-            stress_value=normalized_stress,
-            permanova_results=results_dict,
-            output_file=nmds_plot_file_path,
+            # Perform Phylogenetic RPCA
+            (
+                phylo_ordination,
+                phylo_rpca_distance_df,
+                pruned_tree,
+                filtered_table,
+                filtered_taxonomy,
+            ) = perform_phylogenetic_rpca(
+                asv_table_df=asv_table_location,
+                rooted_tree_newick_path=rooted_tree_newick_path,
+                taxonomy_df=taxonomy_df,
+                output_file=os.path.join(
+                    phylo_rpca_dir,
+                    f"phylo_rpca_location_{location}_distance_matrix.csv",
+                ),
+            )
+
+            # Perform PERMANOVA on the phylo RPCA distance matrix
+            phylo_rpca_results_dict = perform_permanova_with_vegan(
+                metadata=location_df,
+                distance_df=phylo_rpca_distance_df,
+                primary_variable="Diagnosis",
+            )
+
+            # Perform pairwise comparisons with vegan on the phylo RPCA distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=location_df,
+                distance_df=phylo_rpca_distance_df,
+                primary_variable="Diagnosis",
+                output_file=os.path.join(
+                    phylo_rpca_dir,
+                    f"phylo_rpca_pairwise_comparisons_between_diagnoses_{location}.csv",
+                ),
+            )
+
+            # Create a title dictionary for the phylo RPCA plot
+            phylo_title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"Phylo RPCA Biplot comparing Diagnoses for location {location}",
+            }
+
+            plot_biplot_with_ggplot2(
+                ordination_results=phylo_ordination,
+                metadata=location_df,
+                title_dict=phylo_title_dict,
+                permanova_results=phylo_rpca_results_dict,
+                taxonomy_table=filtered_taxonomy,
+                output_file=biplot_file,
+            )
+
+        ##############################
+        # 3.3.3.5  Unweighted UniFrac
+        ##############################
+
+        # Path to figures directory for Unweighted UniFrac results comparing locations per diagnosis
+        unweighted_unifrac_fig_diagnosis_dir = os.path.join(
+            beta_fig_diagnosis_dir, "unweighted_unifrac"
         )
-        print(f"NMDS plot saved to {nmds_plot_file_path}")
 
-        ######################
-        # Robust Aitchison PCA
-        ######################
-
-        # Define RPCA directory
-        rpca_dir = os.path.join(beta_div_dir, "rpca")
-
-        # define output file for RPCA distance matrix
-        rpca_distance_matrix_file = os.path.join(
-            rpca_dir, f"rpca_location_{location}_distance_matrix.csv"
+        # Path to NMDS plot file comparing locations per diagnosis
+        nmds_plot_file_path = os.path.join(
+            unweighted_unifrac_fig_diagnosis_dir,
+            f"unweighted_unifrac_nmds_plot_comparing_diagnoses_{location}.pdf",
         )
 
-        # Perform RPCA
-        rpca_ordination_results, robust_aitchison_distance_df = perform_rpca(
-            asv_table_df=asv_table_location, output_file=rpca_distance_matrix_file
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Unweighted UniFrac NMDS plot already exists at {nmds_plot_file_path}. Skipping Unweighted UniFrac analysis for {location}."
+            )
+        else:
+            print(f"Calculating Unweighted UniFrac distances for {location}...")
+
+            # Path to Unweighted UniFrac directory
+            unweighted_unifrac_diagnosis_dir = os.path.join(
+                beta_div_diagnosis_dir, "unweighted_unifrac"
+            )
+
+            # Path to Unweighted UniFrac distance matrix comparing locations per diagnosis
+            unweighted_unifrac_distance_matrix_file = os.path.join(
+                unweighted_unifrac_diagnosis_dir,
+                f"unweighted_unifrac_distance_matrix_comparing_locations_{diagnosis}.csv",
+            )
+
+            # Calculate Unweighted UniFrac distance
+            unweighted_unifrac_df, unweighted_unifrac_dm = (
+                calculate_unweighted_unifrac_distance(
+                    biom_table_path=biom_file_path,
+                    rooted_tree_newick_path=rooted_tree_newick_path,
+                    output_file=unweighted_unifrac_distance_matrix_file,
+                )
+            )
+
+            # Perform NMDS
+            coordinates_df, normalized_stress = perform_nmds(
+                distance_matrix=unweighted_unifrac_dm
+            )
+
+            # Perform pairwise comparisons with vegan on the Unweighted UniFrac distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=location_df,
+                distance_df=unweighted_unifrac_df,
+                primary_variable="Diagnosis",
+                output_file=os.path.join(
+                    unweighted_unifrac_diagnosis_dir,
+                    f"unweighted_unifrac_pairwise_comparisons_between_diagnoses_{location}.csv",
+                ),
+            )
+
+            # Perform permanova  with vegan on the Unweighted UniFrac distance matrix
+            results_dict = perform_permanova_with_vegan(
+                metadata=location_df,
+                distance_df=unweighted_unifrac_df,
+                primary_variable="Diagnosis",
+            )
+
+            # Create NMDS plot
+            title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"NMDS Plot of Unweighted UniFrac distances comparing diagnoses for {location}",
+                "stress": normalized_stress,
+            }
+
+            # Plot NMDS
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=location_df,
+                permanova_results=results_dict,
+                title_dict=title_dict,
+                output_file=nmds_plot_file_path,
+            )
+
+        ###############################
+        # 3.3.3.5  Generalized UniFrac
+        ##############################
+
+        # Path to figures directory for Generalized UniFrac results comparing locations per diagnosis
+        generalized_unifrac_fig_diagnosis_dir = os.path.join(
+            beta_fig_diagnosis_dir, "generalized_unifrac"
         )
 
-        # Perform PERMANOVA on the RPCA distance matrix
-        rpca_results_dict = perform_permanova_with_vegan(
-            metadata=location_df,
-            distance_df=robust_aitchison_distance_df,
-            primary_variable="Diagnosis",
+        # Path to NMDS plot file comparing locations per diagnosis
+        nmds_plot_file_path = os.path.join(
+            generalized_unifrac_fig_diagnosis_dir,
+            f"generalized_unifrac_nmds_plot_comparing_diagnoses_{location}.pdf",
         )
 
-        # Perform pairwise comparisons with vegan on the RPCA distance matrix
-        perform_pairwise_comparisons_permanova(
-            metadata=location_df,
-            distance_df=robust_aitchison_distance_df,
-            primary_variable="Diagnosis",
-            output_file=os.path.join(
-                rpca_dir,
-                f"rpca_pairwise_comparisons_location_{location}.csv",
-            ),
-        )
+        if os.path.exists(nmds_plot_file_path):
+            print(
+                f"Generalized UniFrac NMDS plot already exists at {nmds_plot_file_path}. Skipping Generalized UniFrac analysis for {location}."
+            )
+        else:
+            print(f"Calculating Generalized UniFrac distances for {location}...")
 
-        # Create a title dictionary for the plot
-        title_dict = {
-            "primary_variable": "Diagnosis",
-            "title": f"RPCA Biplot for location {location}",
-        }
+            # Path to Generalized UniFrac directory
+            generalized_unifrac_diagnosis_dir = os.path.join(
+                beta_div_diagnosis_dir, "generalized_unifrac"
+            )
 
-        output_file = os.path.join(rpca_dir, f"rpca_location_{location}_biplot.pdf")
+            # Path to Generalized UniFrac distance matrix comparing locations per diagnosis
+            generalized_unifrac_distance_matrix_file = os.path.join(
+                generalized_unifrac_diagnosis_dir,
+                f"generalized_unifrac_distance_matrix_comparing_diagnoses_{location}.csv",
+            )
 
-        plot_biplot_with_ggplot2(
-            ordination_results=rpca_ordination_results,
-            metadata=location_df,
-            title_dict=title_dict,
-            permanova_results=rpca_results_dict,
-            taxonomy_table=taxonomy_df,
-            output_file=output_file,
-        )
+            # Calculate Generalized UniFrac distance
+            generalized_unifrac_df, generalized_unifrac_dm = (
+                calculate_generalized_unifrac_distance(
+                    biom_table_path=biom_file_path,
+                    rooted_tree_newick_path=rooted_tree_newick_path,
+                    output_file=generalized_unifrac_distance_matrix_file,
+                )
+            )
 
-        # ############
-        # # Phylo RPCA
-        # ############
+            # Perform NMDS
+            coordinates_df, normalized_stress = perform_nmds(
+                distance_matrix=generalized_unifrac_dm
+            )
 
-        # # Path to directory to results of Phylogenetic Robust Aitchison PCA comparing diagnoses per location
-        # phylo_rpca_dir = os.path.join(
-        #     beta_fig_diagnosis_dir, "phylogenetic_robust_aitchison_pca"
-        # )
+            pairwise_output_file = os.path.join(
+                generalized_unifrac_diagnosis_dir,
+                f"generalized_unifrac_pairwise_comparisons_between_diagnoses_{location}.csv",
+            )
 
-        # (
-        #     phylo_ordination,
-        #     phylo_rpca_distance_df,
-        #     pruned_tree,
-        #     filtered_table,
-        #     filtered_taxonomy,
-        # ) = perform_phylo_rpca(
-        #     asv_table_df=asv_table_location,
-        #     rooted_tree_newick_path=rooted_tree_newick_path,
-        #     taxonomy_df=taxonomy_df,
-        #     output_file=os.path.join(
-        #         phylo_rpca_dir, f"phylo_rpca_location_{location}_distance_matrix.csv"
-        #     ),
-        # )
+            # Perform pairwise comparisons with vegan on the Generalized UniFrac distance matrix
+            perform_pairwise_comparisons_permanova(
+                metadata=location_df,
+                distance_df=generalized_unifrac_df,
+                primary_variable="Diagnosis",
+                output_file=pairwise_output_file,
+            )
 
-        # # Perform PERMANOVA on the phylo RPCA distance matrix
-        # phylo_rpca_results_dict = perform_permanova_with_vegan(
-        #     metadata=location_df,
-        #     distance_df=phylo_rpca_distance_df,
-        #     primary_variable="Diagnosis",
-        # )
+            # Perform permanova  with vegan on the Generalized UniFrac distance matrix
+            results_dict = perform_permanova_with_vegan(
+                metadata=location_df,
+                distance_df=generalized_unifrac_df,
+                primary_variable="Diagnosis",
+            )
 
-        # # Perform pairwise comparisons with vegan on the phylo RPCA distance matrix
-        # perform_pairwise_comparisons_permanova(
-        #     metadata=location_df,
-        #     distance_df=phylo_rpca_distance_df,
-        #     primary_variable="Diagnosis",
-        #     output_file=os.path.join(
-        #         phylo_rpca_dir,
-        #         f"phylo_rpca_pairwise_comparisons_location_{location}.csv",
-        #     ),
-        # )
+            # Create NMDS plot
+            title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"NMDS Plot of Generalized UniFrac distances comparing locations in {diagnosis} Patients",
+                "stress": normalized_stress,
+            }
 
-        # # Create a title dictionary for the phylo RPCA plot
-        # phylo_title_dict = {
-        #     "primary_variable": "Diagnosis",
-        #     "title": f"Phylo RPCA Biplot for location {location}",
-        # }
-
-        # plot_biplot_with_ggplot2(
-        #     ordination_results=phylo_ordination,
-        #     metadata=location_df,
-        #     title_dict=phylo_title_dict,
-        #     permanova_results=phylo_rpca_results_dict,
-        #     taxonomy_table=filtered_taxonomy,
-        #     output_file=os.path.join(
-        #         phylo_rpca_dir, f"phylo_rpca_location_{location}_biplot.pdf"
-        #     ),
-        # )
-
-        # ##########################
-        # # Generalized UniFrac
-        # ##########################
-        # print("Performing Generalized UniFrac analysis...")
-
-        # # Define Generalized UniFrac directory
-        # unifrac_dir = os.path.join(beta_div_dir, "generalized_unifrac")
-
-        # # Define output file for NMDS plot
-        # nmds_plot_file_path = os.path.join(
-        #     beta_div_dir,
-        #     "generalized_unifrac",
-        #     f"generalized_unifrac_location_{location}_nmds_plot.pdf",
-        # )
-
-        # # Check if NMDS plot already exists
-        # if os.path.exists(nmds_plot_file_path):
-        #     print(
-        #         f"Generalized UniFrac NMDS plot already exists at {nmds_plot_file_path}. Skipping analysis."
-        #     )
-        # else:
-        #     unifrac_distance_df, unifrac_distance_matrix = (
-        #         perform_generalized_unifrac_distance(
-        #             biom_table_path=biom_file_path,
-        #             rooted_tree_newick_path=rooted_tree_newick_path,
-        #             output_file=os.path.join(
-        #                 unifrac_dir,
-        #                 f"generalized_unifrac_location_{location}_distance_matrix.csv",
-        #             ),
-        #         )
-        #     )
-
-        #     # Perform PERMANOVA on the Generalized UniFrac distance matrix
-        #     gu_results_dict = perform_permanova_with_vegan(
-        #         metadata=location_df,
-        #         distance_df=unifrac_distance_df,
-        #         primary_variable="Diagnosis",
-        #     )
-
-        #     # Perform pairwise comparisons with vegan on the Generalized UniFrac distance matrix
-        #     perform_pairwise_comparisons_permanova(
-        #         metadata=location_df,
-        #         distance_df=unifrac_distance_df,
-        #         primary_variable="Diagnosis",
-        #         output_file=os.path.join(
-        #             beta_div_dir,
-        #             "generalized_unifrac",
-        #             f"generalized_unifrac_pairwise_comparisons_location_{location}.csv",
-        #         ),
-        #     )
-
-        #     # Perform NMDS on the Generalized UniFrac distance matrix
-        #     gu_coordinates_df, gu_normalized_stress = perform_nmds(
-        #         distance_matrix=unifrac_distance_matrix
-        #     )
-
-        #     # Create a title dictionary for the Generalized UniFrac NMDS plot
-        #     gu_title_dict = {
-        #         "primary_variable": "Diagnosis",
-        #         "title": f"NMDS Plot of Generalized UniFrac distances for location {location}",
-        #     }
-
-        #     # Plot NMDS for Generalized UniFrac
-        #     plot_nmds_with_ggplot2(
-        #         nmds_coordinates=gu_coordinates_df,
-        #         metadata=location_df,
-        #         title_dict=gu_title_dict,
-        #         stress_value=gu_normalized_stress,
-        #         permanova_results=gu_results_dict,
-        #         output_file=nmds_plot_file_path,
-        #     )
-        #     print(f"Generalized UniFrac NMDS plot saved to {nmds_plot_file_path}")
+            # Plot NMDS
+            plot_nmds_with_ggplot2(
+                nmds_coordinates=coordinates_df,
+                metadata=diagnosis_df,
+                permanova_results=results_dict,
+                title_dict=title_dict,
+                output_file=nmds_plot_file_path,
+            )
 
         ##############################
         # Machine Learning Analysis
         ###############################
 
-        # # Make new metadata column by grouping Diagnosis variables
-        # location_df["Diagnosis_Group"] = location_df["Diagnosis"].replace(
-        #     {
-        #         "Healthy": "pre-transformation",
-        #         "GORD": "pre-transformation",
-        #         "BO": "pre-transformation",
-        #         "Dysplasia": "post-transformation",
-        #         "OAC": "post-transformation",
-        #         "Metastatic": "post-transformation",
-        #     }
-        # )
+        # Make new metadata column by grouping Diagnosis variables
+        location_df["Diagnosis_Group"] = location_df["Diagnosis"].replace(
+            {
+                "Healthy": "pre-transformation",
+                "GORD": "pre-transformation",
+                "BO": "pre-transformation",
+                "Dysplasia": "post-transformation",
+                "OAC": "post-transformation",
+                "Metastatic": "post-transformation",
+            }
+        )
 
-        # # make a 0-1 column for Diagnosis_Group for machine learning
-        # location_df["Diagnosis_Group_0_1"] = location_df["Diagnosis_Group"].replace(
-        #     {
-        #         "pre-transformation": 0,
-        #         "post-transformation": 1,
-        #     }
-        # )
+        # make a 0-1 column for Diagnosis_Group for machine learning
+        location_df["Diagnosis_Group_0_1"] = location_df["Diagnosis_Group"].replace(
+            {
+                "pre-transformation": 0,
+                "post-transformation": 1,
+            }
+        )
 
         # model, model_results_dict = train_xgboost_model(
         #     count_table_df=asv_table_location,
@@ -1464,7 +2002,7 @@ def main():
         #     normalization_method="presence_absence",
         # )
 
-        # print("Model training completed.")
+        print("Model training completed.")
 
         #########################################
         #########################################
@@ -1472,58 +2010,59 @@ def main():
         #########################################
         #########################################
 
-        print("Performing DAA on ASVs for location {location}...")
+        # Path to DAA results directory comparing locations per diagnosis
+        daa_diagnosis_dir = os.path.join(daa_dir, "diagnosis")
 
-        # If heatmap already exists, skip
-        daa_asv_plot_file = os.path.join(
-            wor_dir,
-            "figures",
-            "daa_results",
-            "diagnosis",
-            "asv_level",
-            f"daa_asv_results_location_{location}.pdf",
+        # Path to DAA results directory for ASV level analysis comparing locations per diagnosis
+
+        daa_diagnosis_asv_level = os.path.join(daa_diagnosis_dir, "asv_level")
+
+        daa_file = os.path.join(
+            daa_diagnosis_asv_level,
+            f"differential_abundance_results_comparing_diagnoses_{location}.csv",
         )
 
-        if os.path.exists(daa_asv_plot_file):
-            print(
-                f"DAA ASV plot already exists at for location {location}. Skipping DAA analysis for ASVs for location {location}."
-            )
-        else:
-            # Define output file for DAA results
-            daa_file = os.path.join(
-                wor_dir,
-                "daa_results",
-                "diagnosis",
-                "asv_level",
-                f"daa_asv_results_location_{location}.csv",
-            )
+        # Path to DAA figures directory
+        daa_fig_dir = os.path.join(fig_dir, "differential_abundance_analysis")
 
-            # Run LINDA analysis
-            daa_results_taxa_fil_df = linda_daa_asv(
-                asv_table_location,
-                location_df,
-                primary_variable="Diagnosis",
-                taxonomy_table=taxonomy_df,
-                output_file=daa_file,
-            )
+        # Path to DAA figures directory for comparing locations per diagnosis
+        diagnoses_daa_fig_dir = os.path.join(daa_fig_dir, "diagnosis")
 
-            # Plot the DAA results
-            print("Plotting DAA results for ASVs...")
+        # Path to DAA figures directory for ASV level analysis comparing locations per diagnosis
+        diagnosis_daa_asv_fig_dir = os.path.join(diagnoses_daa_fig_dir, "asv_level")
 
-            # constitute title dictionary for the plot
-            title_dict = {
-                "primary_variable": "Diagnosis",
-                "title": f"DAA Results for ASVs at location {location}",
-            }
+        # Figure path to save the DAA plot
+        daa_asv_plot_file = os.path.join(
+            diagnosis_daa_asv_fig_dir,
+            f"daa_asv_heatmap_comparing_diagnoses_{location}.pdf",
+        )
 
-            plot_heatmap_of_daa(
-                daa_df=daa_results_taxa_fil_df,
-                title_dict=title_dict,
-                output_file=daa_asv_plot_file,
-                asv=True,  # Set asv to True for ASV level analysis
-            )
+        # Run LINDA analysis
+        daa_results_taxa_fil_df = linda_daa_asv(
+            asv_table=asv_table_location,
+            metadata=location_df,
+            primary_variable="Diagnosis",
+            taxonomy_table=taxonomy_df,
+            output_file=daa_file,
+            threshold=5,
+            pairwise=False,
+        )
 
-            print(f"DAA ASV plot saved to {daa_asv_plot_file}")
+        # Plot the DAA results
+        print("Plotting DAA results for ASVs...")
+
+        # constitute title dictionary for the plot
+        title_dict = {
+            "primary_variable": "Diagnosis",
+            "title": f"Heatmap of DAA Results for ASVs comparing Diagnoses for location {location}",
+        }
+
+        plot_heatmap_of_daa(
+            daa_df=daa_results_taxa_fil_df,
+            title_dict=title_dict,
+            output_file=daa_asv_plot_file,
+            asv=True,
+        )
 
         # Taxonomic ranks to process
         ranks = ["species", "genus", "family", "order", "class", "phylum"]
@@ -1534,10 +2073,10 @@ def main():
             rank_daa_plot_file = os.path.join(
                 wor_dir,
                 "figures",
-                "daa_results",
+                "differential_abundance_analysis",
                 "diagnosis",
                 f"{rank}_level",
-                f"daa_{rank}_results_location_{location}.pdf",
+                f"daa_{rank}_heatmap_comparing_diagnoses_{location}.pdf",
             )
 
             if os.path.exists(rank_daa_plot_file):
@@ -1561,16 +2100,18 @@ def main():
                 # Define output file for DAA results
                 output_file = os.path.join(
                     wor_dir,
-                    "daa_results",
+                    "differential_abundance_analysis",
                     "diagnosis",
                     f"{rank}_level",
-                    f"daa_{rank}_results_location_{location}.csv",
+                    f"daa_{rank}_results_comparing_diagnoses_{location}.csv",
                 )
 
                 taxon_daa_results_fil_df = linda_daa_taxon(
                     taxa_table_df,
                     location_df,
                     primary_variable="Diagnosis",
+                    pairwise=False,
+                    threshold=5,
                     output_file=output_file,
                 )
 
@@ -1590,124 +2131,145 @@ def main():
                     asv=False,  # Set asv to False for taxonomic level analysis
                 )
 
-        # #####################################
-        # DAA on predicted pathways
-        #####################################
+                print(f"Finished processing {rank} level for location {location}.")
 
-        # print("Performing DAA on pathways...")
+        ##########################################################################
+        ##########################################################################
+        # Differential Abundance Analysis (LINDA) on predicted functional features
+        ##########################################################################
+        ##########################################################################
 
-        # # Define all the pathway types and their corresponding variables
-        # pathway_info = [
-        #     {
-        #         "name": "KEGG",
-        #         "table_df": kegg_pathways_df,
-        #         "subfolder": "kegg_level",
-        #         "file_prefix": "kegg",
-        #     },
-        #     {
-        #         "name": "EC",
-        #         "table_df": enzyme_commission_df,
-        #         "subfolder": "ec_level",
-        #         "file_prefix": "ec",
-        #     },
-        #     {
-        #         "name": "MetaCyc",
-        #         "table_df": metabolic_pathways_df,
-        #         "subfolder": "metacyc_level",
-        #         "file_prefix": "metacyc",
-        #     },
-        # ]
+        # Path to PICRUSt2 analysis directory
+        picrust2_dir = os.path.join(wor_dir, "picrust2_differential_abundance_analysis")
 
-        # for info in pathway_info:
-        #     print(f"Performing DAA on {info['name']} pathways...")
+        # Path to PICRUSt2 analysis results comparing diagnoses per location
+        picrust2_diagnosis_dir = os.path.join(picrust2_dir, "diagnosis")
 
-        #     table_location = info["table_df"][location_df.index]
+        # Path to figures for Picrust2 analysis
+        picrust2_fig_dir = os.path.join(
+            fig_dir, "picrust2_differential_abundance_analysis"
+        )
 
-        #     # Define output file for DAA results
-        #     daa_file = os.path.join(
-        #         wor_dir,
-        #         "daa_results",
-        #         "diagnosis",
-        #         info["subfolder"],
-        #         f"daa_{info['file_prefix']}_results_location_{location}.csv",
-        #     )
+        # Path to figures for Picrust2 analysis comparing diagnoses per location
+        picrust2_diagnosis_fig_dir = os.path.join(picrust2_fig_dir, "diagnosis")
 
-        #     # Run LINDA analysis
-        #     daa_results_df, daa_results_fil_df = linda_daa_picrust2(
-        #         function_table_df=table_location,
-        #         metadata_df=location_df,
-        #         primary_variable="Diagnosis",
-        #         output_file=daa_file,
-        #     )
+        print("Performing DAA on pathways...")
 
-        #     # Plot the DAA results
-        #     print(f"Plotting DAA results for {info['name']} pathways...")
-        #     plot_file_path = os.path.join(
-        #         wor_dir,
-        #         "figures",
-        #         "daa_results",
-        #         "diagnosis",
-        #         info["subfolder"],
-        #         f"daa_{info['file_prefix']}_results_location_{location}.pdf",
-        #     )
+        # Define all the pathway types and their corresponding variables
+        pathway_info = [
+            {
+                "name": "KEGG",
+                "table_df": kegg_pathways_df,
+                "subfolder": "kegg_level",
+                "file_prefix": "kegg",
+            },
+            {
+                "name": "EC",
+                "table_df": enzyme_commission_df,
+                "subfolder": "ec_level",
+                "file_prefix": "ec",
+            },
+            {
+                "name": "MetaCyc",
+                "table_df": metabolic_pathways_df,
+                "subfolder": "metacyc_level",
+                "file_prefix": "metacyc",
+            },
+        ]
 
-        #     # constitute title dictionary for the plot
-        #     title_dict = {
-        #         "primary_variable": "Diagnosis",
-        #         "title": f"DAA Results for {info['name']} pathways at location {location}",
-        #     }
+        for info in pathway_info:
+            print(f"Performing DAA on {info['name']} pathways...")
 
-        #     plot_heatmap_of_daa(
-        #         daa_df=daa_results_fil_df,
-        #         title_dict=title_dict,
-        #         output_file=plot_file_path,
-        #         asv=False,  # Set asv to False for pathway level analysis
-        #     )
+            table_location = info["table_df"][location_df.index]
 
-        ##################
-        # Network analysis
-        ##################
+            # Define output file for DAA results
+            daa_file = os.path.join(
+                wor_dir,
+                picrust2_diagnosis_dir,
+                info["subfolder"],
+                f"daa_{info['file_prefix']}_results_comparing_diagnoses_{location}.csv",
+            )
 
-        # ranks = ["species", "genus", "family", "order", "class", "phylum"]
+            # Run LINDA analysis
+            daa_results_fil_df = linda_daa_picrust2(
+                function_table_df=table_location,
+                metadata_df=location_df,
+                primary_variable="Diagnosis",
+                threshold=20,
+                pairwise=False,
+                output_file=daa_file,
+            )
 
-        # for rank in ranks:
-        #     # Define output file path for taxa tables
-        #     taxa_tables_file = os.path.join(
-        #         wor_dir, "tables", "taxa_tables", f"{rank}_table.csv"
-        #     )
+            # Plot the DAA results
+            print(f"Plotting DAA results for {info['name']} pathways...")
+            plot_file_path = os.path.join(
+                wor_dir,
+                picrust2_diagnosis_fig_dir,
+                info["subfolder"],
+                f"daa_{info['file_prefix']}_heatmap_comparing_diagnoses_{location}.pdf",
+            )
 
-        #     # Create taxa tables
-        #     taxa_table_df = create_taxa_tables(
-        #         asv_table_df,
-        #         taxonomy_df,
-        #         rank=rank,
-        #         output_file=taxa_tables_file,
-        #     )
+            # constitute title dictionary for the plot
+            title_dict = {
+                "primary_variable": "Diagnosis",
+                "title": f"DAA Results for {info['name']} functions comparing Diagnoses for {location}",
+            }
 
-        #     # Define title dictionary for co-occurrence analysis
-        #     title_dict = {
-        #         "primary_variable": "Diagnosis",
-        #         "location": str(location),  # Convert to string here
-        #         "rank": rank,
-        #     }
+            plot_heatmap_of_daa(
+                daa_df=daa_results_fil_df,
+                title_dict=title_dict,
+                output_file=plot_file_path,
+                asv=False,  # Set asv to False for pathway level analysis
+            )
 
-        #     # Define output directory for co-occurrence analysis
-        #     output_dir = os.path.join(
-        #         wor_dir,
-        #         "co_occurrence_analysis",
-        #         f"{rank}_level",
-        #         str(location),  # Convert to string here too
-        #     )
+        print(f"Finished all analyses for location: {location}")
 
-        #     print("Performing co-occurrence analysis for rank:", rank)
+    print("Finished all locations analyses.")
 
-        #     perform_co_occurrence_network(
-        #         taxa_table_df=taxa_table_df,
-        #         title_dict=title_dict,
-        #         output_dir=output_dir,
-        # )
+    ##################
+    # Network analysis
+    ##################
 
-        print(f"Finished processing location: {location}")
+    # ranks = ["species", "genus", "family", "order", "class", "phylum"]
+
+    # for rank in ranks:
+    #     # Define output file path for taxa tables
+    #     taxa_tables_file = os.path.join(
+    #         wor_dir, "tables", "taxa_tables", f"{rank}_table.csv"
+    #     )
+
+    #     # Create taxa tables
+    #     taxa_table_df = create_taxa_tables(
+    #         asv_table_df,
+    #         taxonomy_df,
+    #         rank=rank,
+    #         output_file=taxa_tables_file,
+    #     )
+
+    #     # Define title dictionary for co-occurrence analysis
+    #     title_dict = {
+    #         "primary_variable": "Diagnosis",
+    #         "location": str(location),  # Convert to string here
+    #         "rank": rank,
+    #     }
+
+    #     # Define output directory for co-occurrence analysis
+    #     output_dir = os.path.join(
+    #         wor_dir,
+    #         "co_occurrence_analysis",
+    #         f"{rank}_level",
+    #         str(location),  # Convert to string here too
+    #     )
+
+    #     print("Performing co-occurrence analysis for rank:", rank)
+
+    #     perform_co_occurrence_network(
+    #         taxa_table_df=taxa_table_df,
+    #         title_dict=title_dict,
+    #         output_dir=output_dir,
+    # )
+
+    # print(f"Finished processing location: {location}")
 
     # End of location loop
 

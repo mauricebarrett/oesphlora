@@ -4,12 +4,17 @@ import biom  # type: ignore
 import pandas as pd
 import unifrac  # type: ignore
 from biom.table import Table  # type: ignore
-from gemelli.rpca import phylogenetic_rpca, rpca  # type: ignore
 from rpy2.robjects import pandas2ri, r  # type: ignore
 from skbio import DistanceMatrix, OrdinationResults, TreeNode  # type: ignore
 from skbio.diversity import beta_diversity  # type: ignore
 
 from python.processing import reformat_taxonomy
+
+# Disable CUDA to avoid GPU initialization errors
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["NUMBA_DISABLE_CUDA"] = "1"
+
+from gemelli.rpca import phylogenetic_rpca, rpca  # type: ignore
 
 
 def calculate_jaccard_distance(
@@ -85,7 +90,7 @@ def calculate_bray_curtis_distance(
     return bray_curtis_df, bray_curtis_dm
 
 
-def perform_generalized_unifrac_distance(
+def calculate_generalized_unifrac_distance(
     biom_table_path: str,
     rooted_tree_newick_path: str,
     output_file: str,
@@ -175,7 +180,6 @@ def perform_permanova_with_vegan(
     # Convert the R data frame to a Python dictionary for easy use
     results_dict = results_df.set_index("metric")["value"].to_dict()
 
-    print(f"PERMANOVA and betadisper results: {results_dict}")
     return results_dict
 
 

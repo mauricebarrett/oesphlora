@@ -21,6 +21,16 @@ PKG_CONFIG_PATH = "$PIXI_ENV_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
 
 [tasks.install-fqkit]
 cmd = "echo Installing fqkit locally; cargo install fqkit --version 0.4.14; echo fqkit installed"
+
+[tasks.install-gemelli]
+cmd="pip install gemelli"
+
+[task.install-dependacues]
+cmd = """
+pixi run install-fqkit
+pixi run install-gemelli
+"""
+
 [tasks.test-python]
 cmd = "pytest -q"
 

@@ -21,6 +21,13 @@ There are two ways to set up this project:
 1. Docker
 2. Native installation (Only for Ubuntu)
 
+either way you will need to clone the repo
+
+```bash
+git clone https://github.com/mauricebarrett/oesphlora.git
+cd oesphlora
+```
+
 ### Option 1: Docker
 
 The easiest way is to use the prebuilt Docker image, which will contain required dependencies.

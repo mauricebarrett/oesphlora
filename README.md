@@ -61,6 +61,10 @@ pixi run install-fqkit
 #### Step 4: Install main analysis enviroment
 Install main analysis enviroment
 
+```bash
+pixi install -e analysis
+```
+
 
 ## Author
 

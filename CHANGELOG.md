@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/mauricebarrett/oesphlora/compare/v1.7.2...v1.7.3) (2025-10-28)
+
+
+### Bug Fixes
+
+* correct typo in task name for installing dependencies in pixi.toml ([33f455a](https://github.com/mauricebarrett/oesphlora/commit/33f455ae145b93ca03536f3cd92f9802b7fb3e34))
+
 ## [1.7.2](https://github.com/mauricebarrett/oesphlora/compare/v1.7.1...v1.7.2) (2025-10-28)
 
 

@@ -33,8 +33,8 @@ Most dependencies are handled automatically by pixi.
 #### Step 1: Install pixi maneged dependacies
 Follow the instuctions in the link to install pixi [pixi installation guide](https://pixi.sh/latest/#installation)
 
-#### Step 2: Install the deafult envioment
-Install deafult envioment like so
+#### Step 2: Install the deafult enviroment
+Install deafult enviroment as follows
 
 ```bash
 pixi intall -e default

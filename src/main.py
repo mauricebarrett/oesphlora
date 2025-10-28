@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List
 
 import h5py  # type: ignore
-import pandas as pd
+import pandas as pd # type: ignore
 from biom.table import Table  # type: ignore
 
 from python.beta_diversity_analysis import (

@@ -1,3 +1,11 @@
+## [1.7.2](https://github.com/mauricebarrett/oesphlora/compare/v1.7.1...v1.7.2) (2025-10-28)
+
+
+### Bug Fixes
+
+* adjust pandas import statement formatting ([251a871](https://github.com/mauricebarrett/oesphlora/commit/251a8716e1455119b482db01177f0472fa23a505))
+* correct spelling errors in installation instructions ([4251c35](https://github.com/mauricebarrett/oesphlora/commit/4251c35c7324fa00f18737bfb4f0fadaabc6af4f))
+
 ## [1.7.1](https://github.com/mauricebarrett/oesphlora/compare/v1.7.0...v1.7.1) (2025-09-24)
 
 

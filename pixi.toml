@@ -25,7 +25,7 @@ cmd = "echo Installing fqkit locally; cargo install fqkit --version 0.4.14; echo
 [tasks.install-gemelli]
 cmd="pip install gemelli"
 
-[task.install-install-dependencies]
+[tasks.install-dependencies]
 cmd = """
 pixi run install-fqkit
 pixi run install-gemelli

@@ -33,15 +33,21 @@ Most dependencies are handled automatically by pixi.
 #### Step 1: Install pixi maneged dependacies
 Follow the instuctions in the link to install pixi [pixi installation guide](https://pixi.sh/latest/#installation)
 
-Once pixi is install one may enter the
+#### Step 2: Install the deafult envioment
+Install deafult envioment like so
 
 ```bash
-pixi intall
+pixi intall -e default
 ```
 
-This should install all dependacies installed by
+#### Step 3: Installing dependacies not manged by Conda (fqkit)
+Some dependencies cannot be installed via Pixi because they are not managed by Conda. This workflow uses fqkit, which is installed from its Rust crate using cargo. The command below installs fqkit into a local cargo directory within the project.
 
-#### Step 2: Install all other dependacies
+```bash
+pixi run install-fqkit
+```
+
+#### Step 3: Install main analysis enviroment
 
 
 

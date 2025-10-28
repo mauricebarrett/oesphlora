@@ -25,12 +25,15 @@ There are two ways to set up this project:
 
 The easiest way is to use the prebuilt Docker image, which will contain required dependencies.
 
+#### Step 1
+
+
 ### Option 2: Native installation
 
 This project uses [pixi](https://pixi.sh) for environment management.
 Most dependencies are handled automatically by pixi.
 
-#### Step 1: Install pixi maneged dependacies
+#### Step 1: Install Pixi
 Follow the instuctions in the link to install pixi [pixi installation guide](https://pixi.sh/latest/#installation)
 
 #### Step 2: Install the deafult enviroment
@@ -47,8 +50,8 @@ Some dependencies cannot be installed via Pixi because they are not managed by C
 pixi run install-fqkit
 ```
 
-#### Step 3: Install main analysis enviroment
-
+#### Step 4: Install main analysis enviroment
+Install main analysis enviroment
 
 
 ## Author

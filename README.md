@@ -32,8 +32,9 @@ cd oesphlora
 
 The easiest way is to use the prebuilt Docker image, which will contain required dependencies.
 
-#### Step 1
+#### Step 1: Install Docker
 
+Follow the instuctions in the link to install Docker[Install Docker Engine] https://docs.docker.com/engine/install/
 
 ### Option 2: Native installation
 

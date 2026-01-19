@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/mauricebarrett/oesphlora/compare/v1.7.4...v1.8.0) (2026-01-19)
+
+
+### Features
+
+* add demographic analysis and summary statistics generation ([e5319fb](https://github.com/mauricebarrett/oesphlora/commit/e5319fb0e1292228c89f2187e09c1a364cc2e3cf))
+
 ## [1.7.4](https://github.com/mauricebarrett/oesphlora/compare/v1.7.3...v1.7.4) (2025-10-28)
 
 

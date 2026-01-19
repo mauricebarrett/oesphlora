@@ -1,19 +1,32 @@
+import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (  # type: ignore
+from sklearn.metrics import auc  # type: ignore
+
+from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
+    confusion_matrix,
     f1_score,
+    precision_score,
+    recall_score,
     roc_auc_score,
+    roc_curve,
 )
-from sklearn.model_selection import (  # type: ignore
-    RandomizedSearchCV,  # Import from sklearn, not xgboost
-    StratifiedKFold,
+from sklearn.model_selection import StratifiedKFold  # type: ignore
+from sklearn.model_selection import (  # Import from sklearn, not xgboost
+    RandomizedSearchCV,
     train_test_split,
 )
 from xgboost import XGBClassifier
 
-from python.normalization import presence_absence_transform, rclr_transform
+from python.normalization import (
+    presence_absence_transform,
+    rclr_transform,
+    total_sum_scaling,
+)
 
 
 def prevalence_filtering(
@@ -28,12 +41,36 @@ def prevalence_filtering(
     return count_table_df.loc[feature_prevalence >= prevalence_threshold, :]
 
 
+def plot_roc_curve(
+    model: XGBClassifier, X_test: pd.DataFrame, y_test: pd.Series, filename: str
+) -> None:
+    """Plot ROC curve for the given model and test data."""
+
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(7, 6))
+    plt.plot(fpr, tpr, color="blue", lw=2, label=f"ROC curve (AUC = {roc_auc:.3f})")
+    plt.plot([0, 1], [0, 1], color="gray", linestyle="--", lw=1, label="Random chance")
+    plt.xlabel("False Positive Rate (1 - Specificity)")
+    plt.ylabel("True Positive Rate (Sensitivity)")
+    plt.title("Receiver Operating Characteristic (ROC) Curve")
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(filename, format="pdf")
+    plt.close()
+    print(f"ROC curve saved as '{filename}'")
+
+
 def train_xgboost_model(
     count_table_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
     primary_label: str,
     normalization_method: str,
-) -> tuple[XGBClassifier, dict]:
+    output_dir: str,
+) -> None:
     """Train an XGBoost classifier on the provided data.
 
     Args:
@@ -55,13 +92,20 @@ def train_xgboost_model(
         data = rclr_transform(count_table_df, qiime_orientation=True)
     elif normalization_method == "presence_absence":
         data = presence_absence_transform(count_table_df, qiime_orientation=True)
+    elif normalization_method == "tss":
+        data = total_sum_scaling(count_table_df, qiime_orientation=True)
     else:
         raise ValueError(
             f"Unsupported normalization method: {normalization_method}. "
-            "Choose 'rclr' or 'presence_absence'."
+            "Choose 'rclr' or 'presence_absence' or 'tss'."
         )
 
+    # Create output directory if it does not exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    #########################################################
     # Extract target variable from metadata
+    #########################################################
     if primary_label not in metadata_df.columns:
         raise ValueError(f"Primary label '{primary_label}' not found in metadata.")
     target = metadata_df[primary_label]
@@ -111,14 +155,24 @@ def train_xgboost_model(
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     # Randomized search for hyperparameter tuning
+    # Use a dictionary of scoring metrics to get all metrics in cv_results_
+    scoring_metrics = {
+        "roc_auc": "roc_auc",
+        "average_precision": "average_precision",
+        "accuracy": "accuracy",
+        "f1": "f1",
+        "precision": "precision",
+        "recall": "recall",
+    }
+
     search = RandomizedSearchCV(
         estimator=base_model,
         param_distributions=param_dist,
         n_iter=60,
-        scoring="roc_auc",
+        scoring=scoring_metrics,
         n_jobs=-1,
         cv=cv,
-        refit=True,
+        refit="roc_auc",  # Refit using ROC AUC as the primary metric
         verbose=1,
         random_state=42,
     )
@@ -135,21 +189,62 @@ def train_xgboost_model(
     # Get the best model
     best_model = search.best_estimator_
 
+    # Cross-validation results
+    cv_results = search.cv_results_
+    cv_roc_auc = cv_results["mean_test_roc_auc"]
+    cv_pr_auc = cv_results["mean_test_average_precision"]
+    cv_accuracy = cv_results["mean_test_accuracy"]
+    cv_f1 = cv_results["mean_test_f1"]
+    cv_precision = cv_results["mean_test_precision"]
+    cv_recall = cv_results["mean_test_recall"]
+
+    cv_results_df = pd.DataFrame(
+        {
+            "ROC AUC": cv_roc_auc,
+            "PR AUC": cv_pr_auc,
+            "Accuracy": cv_accuracy,
+            "F1-score": cv_f1,
+            "Precision": cv_precision,
+            "Recall": cv_recall,
+        },
+        index=cv_results["params"],
+    )
+    cv_results_df.to_csv(f"{output_dir}/cv_results.csv")
+
+    # Path to AUC ROC plot file
+    roc_plot_file = f"{output_dir}/roc_curve.pdf"
+
+    # Plot ROC curve
+    plot_roc_curve(best_model, X_test, y_test, roc_plot_file)
+
     # Evaluate on test set
     y_pred = best_model.predict(X_test)
     y_pred_proba = best_model.predict_proba(X_test)[:, 1]
 
-    # Calculate metrics
+    # Use the model's class ordering consistently across metrics
+    classes = best_model.classes_
+
+    # Confusion matrix
+    cm = confusion_matrix(y_test, y_pred, labels=classes)
+    confusion_matrix_df = pd.DataFrame(
+        cm,
+        index=classes,
+        columns=classes,
+    )
+    confusion_matrix_df.to_csv(f"{output_dir}/confusion_matrix.csv")
+
     roc_auc = roc_auc_score(y_test, y_pred_proba)
     pr_auc = average_precision_score(y_test, y_pred_proba)
+    precision = precision_score(
+        y_test, y_pred, labels=classes, average=None, zero_division=0
+    )
+    recall = recall_score(y_test, y_pred, labels=classes, average=None, zero_division=0)
+    f1 = f1_score(y_test, y_pred, labels=classes, average=None, zero_division=0)
     accuracy = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
 
-    scores = {
-        "roc_auc": roc_auc,
-        "pr_auc": pr_auc,
-        "accuracy": accuracy,
-        "f1_score": f1,
-    }
+    overall_report_df = pd.DataFrame(
+        {"Value": [roc_auc, precision, recall, f1, pr_auc, accuracy]},
+        index=["ROC AUC", "Precision", "Recall", "F1-score", "PR AUC", "Accuracy"],
+    )
 
-    return best_model, scores
+    overall_report_df.to_csv(f"{output_dir}/overall_report.csv")

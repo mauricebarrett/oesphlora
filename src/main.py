@@ -6,8 +6,12 @@ from pathlib import Path
 from typing import List
 
 import h5py  # type: ignore
-import pandas as pd # type: ignore
+import pandas as pd  # type: ignore
 from biom.table import Table  # type: ignore
+
+# from python import co_occurrence_analysis
+
+# from python.ml_analysis import train_xgboost_model
 
 from python.beta_diversity_analysis import (
     calculate_bray_curtis_distance,
@@ -43,6 +47,10 @@ from python.plotting import (
 )
 from python.processing import classify_taxonomy_nb, generate_asv_table, remove_primers
 from python.qc_functions import fastq_qc, plot_read_counts_primer_trimmed
+
+
+# from python.co_occurrence_analysis import perform_co_occurrence_network
+from python.demographic_analysis import generate_demographic_table
 
 
 # Function to parse input arguments
@@ -437,6 +445,53 @@ def main():
 
     # Subset asv_table_dep_fil_df to only include samples in merged_df
     asv_table_dep_fil_df = asv_table_dep_fil_df[merged_df.index]
+
+    ##########################################################
+    # Generate demographic characteristics table
+    ##########################################################
+    demographic_table_file = os.path.join(
+        wor_dir, "metadata", "demographic_characteristics_table.csv"
+    )
+
+    demographic_table = generate_demographic_table(
+        metadata_df=merged_df,
+        output_file=demographic_table_file,
+    )
+    print("Demographic characteristics table:")
+    print(demographic_table)
+
+    ########################################################################
+    # Summary statistics of number of individuals per diagnosis per location
+    ########################################################################
+    summary_stats_file = os.path.join(
+        wor_dir, "metadata", "summary_statistics_diagnosis_location.csv"
+    )
+
+    summary_stats = (
+        merged_df.groupby(["Diagnosis", "sample_location"])["patient_id"]
+        .nunique()
+        .reset_index()
+        .pivot(index="sample_location", columns="Diagnosis", values="patient_id")
+        .fillna(0)
+        .astype(int)
+    )
+
+    ordered_columns = [
+        "Healthy",
+        "GORD",
+        "BO",
+        "Dysplasia",
+        "OAC",
+        "Metastatic",
+    ]
+
+    summary_stats = summary_stats[ordered_columns]
+
+    # Sum rows and columns to get totals
+    summary_stats.loc["Total"] = summary_stats.sum(numeric_only=True, axis=0)
+    summary_stats["Total"] = summary_stats.sum(numeric_only=True, axis=1)
+
+    summary_stats.to_csv(summary_stats_file)
 
     ##########################################################################
     ##########################################################################
@@ -1316,20 +1371,20 @@ def main():
             diagnosis_daa_asv_fig_dir, f"daa_asv_heatmap_diagnosis_{diagnosis}.pdf"
         )
 
-        if os.path.exists(daa_asv_plot_file):
+        # Path to DAA results directory for ASV level analysis comparing locations per diagnosis
+        location_daa_asv_level = os.path.join(location_daa_dir, "asv_level")
+
+        daa_asv_file = os.path.join(
+            location_daa_asv_level,
+            f"differential_abundance_results_location_{diagnosis}.csv",
+        )
+
+        if os.path.exists(daa_asv_file):
             print(
                 f"DAA at the ASV level for comparing locations for {diagnosis} already done. Skipping ASV level analysis."
             )
         else:
             print(f"Performing DAA at the ASV level for {diagnosis}...")
-
-            # Path to DAA results directory for ASV level analysis comparing locations per diagnosis
-            location_daa_asv_level = os.path.join(location_daa_dir, "asv_level")
-
-            daa_file = os.path.join(
-                location_daa_asv_level,
-                f"differential_abundance_results_location_{diagnosis}.csv",
-            )
 
             # Run LINDA analysis
             daa_results_taxa_fil_df = linda_daa_asv(
@@ -1337,7 +1392,7 @@ def main():
                 metadata=diagnosis_df,
                 primary_variable="sample_location",
                 taxonomy_table=taxonomy_df,
-                output_file=daa_file,
+                output_file=daa_asv_file,
                 threshold=5,
                 pairwise=True,
             )
@@ -1374,21 +1429,18 @@ def main():
                 f"daa_{rank}_heatmap_location_{diagnosis}.pdf",
             )
 
-            if os.path.exists(rank_daa_plot_file):
+            location_daa_rank_level = os.path.join(location_daa_dir, f"{rank}_level")
+
+            daa_rank_file = os.path.join(
+                location_daa_rank_level,
+                f"daa_{rank}_results_location_{diagnosis}.csv",
+            )
+
+            if os.path.exists(daa_rank_file):
                 print(
                     f"DAA at the {rank} level for comparing locations for {diagnosis} already done. Skipping {rank} level analysis."
                 )
             else:
-                location_daa_rank_level = os.path.join(
-                    location_daa_dir, f"{rank}_level"
-                )
-
-                # Define output file for DAA results
-                daa_rank_file = os.path.join(
-                    location_daa_rank_level,
-                    f"daa_{rank}_results_location_{diagnosis}.csv",
-                )
-
                 # Define output file path for taxa tables
                 taxa_tables_file = os.path.join(
                     wor_dir, "tables", "taxa_tables", f"{rank}_table.csv"
@@ -1640,17 +1692,44 @@ def main():
                 primary_variable="Diagnosis",
             )
 
+            # Save the permanova results to a CSV file
+            results_df = pd.DataFrame(
+                [
+                    {"metric": metric, "value": value}
+                    for metric, value in results_dict.items()
+                ]
+            )
+            results_df.to_csv(
+                os.path.join(
+                    bray_curtis_diagnosis_dir,
+                    f"bray_curtis_permanova_results_{location}.csv",
+                ),
+                index=False,
+            )
+
             # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
             perform_pairwise_comparisons_permanova(
                 metadata=location_df,
                 distance_df=bray_curtis_df,
                 primary_variable="Diagnosis",
-                output_file=bray_curtis_dist_file,
+                output_file=os.path.join(
+                    bray_curtis_diagnosis_dir,
+                    f"bray_curtis_pairwise_permanova_comparisons_between_diagnoses_{location}.csv",
+                ),
             )
 
             # Perform NMDS on the Bray-Curtis distance matrix
             coordinates_df, normalized_stress = perform_nmds(
                 distance_matrix=bray_curtis_dm
+            )
+
+            # Save the NMDS coordinates to a CSV file
+            coordinates_df.to_csv(
+                os.path.join(
+                    bray_curtis_diagnosis_dir,
+                    f"bray_curtis_nmds_coordinates_{location}.csv",
+                ),
+                index=True,
             )
 
             # Define a title dictionary for the NMDS plot
@@ -1971,38 +2050,52 @@ def main():
                 output_file=nmds_plot_file_path,
             )
 
-        ##############################
+        ###############################
+        ###############################
         # Machine Learning Analysis
         ###############################
+        ###############################
+        # Make a copy to avoid SettingWithCopyWarning
+        # location_df = location_df.copy()
 
-        # Make new metadata column by grouping Diagnosis variables
-        location_df["Diagnosis_Group"] = location_df["Diagnosis"].replace(
-            {
-                "Healthy": "pre-transformation",
-                "GORD": "pre-transformation",
-                "BO": "pre-transformation",
-                "Dysplasia": "post-transformation",
-                "OAC": "post-transformation",
-                "Metastatic": "post-transformation",
-            }
-        )
+        # # Make new metadata column by grouping Diagnosis variables
+        # location_df.loc[:, "Diagnosis_Group"] = location_df["Diagnosis"].replace(
+        #     {
+        #         "Healthy": "pre-transformation",
+        #         "GORD": "pre-transformation",
+        #         "BO": "pre-transformation",
+        #         "Dysplasia": "post-transformation",
+        #         "OAC": "post-transformation",
+        #         "Metastatic": "post-transformation",
+        #     }
+        # )
 
-        # make a 0-1 column for Diagnosis_Group for machine learning
-        location_df["Diagnosis_Group_0_1"] = location_df["Diagnosis_Group"].replace(
-            {
-                "pre-transformation": 0,
-                "post-transformation": 1,
-            }
-        )
+        # # make a 0-1 column for Diagnosis_Group for machine learning
+        # location_df.loc[:, "Diagnosis_Group_0_1"] = (
+        #     location_df["Diagnosis_Group"]
+        #     .map(
+        #         {
+        #             "pre-transformation": 0,
+        #             "post-transformation": 1,
+        #         }
+        #     )
+        #     .astype(int)
+        # )
 
-        # model, model_results_dict = train_xgboost_model(
+        # train_xgboost_model(
         #     count_table_df=asv_table_location,
         #     metadata_df=location_df,
         #     primary_label="Diagnosis_Group_0_1",
         #     normalization_method="presence_absence",
+        #     output_dir=os.path.join(
+        #         wor_dir,
+        #         "machine_learning_analysis",
+        #         "diagnosis",
+        #         location,
+        #     ),
         # )
 
-        print("Model training completed.")
+        # print("Model training completed.")
 
         #########################################
         #########################################
@@ -2190,88 +2283,102 @@ def main():
                 f"daa_{info['file_prefix']}_results_comparing_diagnoses_{location}.csv",
             )
 
-            # Run LINDA analysis
-            daa_results_fil_df = linda_daa_picrust2(
-                function_table_df=table_location,
-                metadata_df=location_df,
-                primary_variable="Diagnosis",
-                threshold=20,
-                pairwise=False,
-                output_file=daa_file,
-            )
+            # Skip if the file already exists
+            if os.path.exists(daa_file):
+                print(
+                    f"DAA results already exist for {info['name']} pathways at {location}. Skipping DAA analysis for {info['name']} pathways at {location}."
+                )
+            else:
+                # Run LINDA analysis
+                daa_results_fil_df = linda_daa_picrust2(
+                    function_table_df=table_location,
+                    metadata_df=location_df,
+                    primary_variable="Diagnosis",
+                    threshold=20,
+                    pairwise=False,
+                    output_file=daa_file,
+                )
 
-            # Plot the DAA results
-            print(f"Plotting DAA results for {info['name']} pathways...")
-            plot_file_path = os.path.join(
-                wor_dir,
-                picrust2_diagnosis_fig_dir,
-                info["subfolder"],
-                f"daa_{info['file_prefix']}_heatmap_comparing_diagnoses_{location}.pdf",
-            )
+                # Plot the DAA results
+                print(f"Plotting DAA results for {info['name']} pathways...")
+                plot_file_path = os.path.join(
+                    wor_dir,
+                    picrust2_diagnosis_fig_dir,
+                    info["subfolder"],
+                    f"daa_{info['file_prefix']}_heatmap_comparing_diagnoses_{location}.pdf",
+                )
 
-            # constitute title dictionary for the plot
-            title_dict = {
-                "primary_variable": "Diagnosis",
-                "title": f"DAA Results for {info['name']} functions comparing Diagnoses for {location}",
-            }
+                # constitute title dictionary for the plot
+                title_dict = {
+                    "primary_variable": "Diagnosis",
+                    "title": f"DAA Results for {info['name']} functions comparing Diagnoses for {location}",
+                }
 
-            plot_heatmap_of_daa(
-                daa_df=daa_results_fil_df,
-                title_dict=title_dict,
-                output_file=plot_file_path,
-                asv=False,  # Set asv to False for pathway level analysis
-            )
+                plot_heatmap_of_daa(
+                    daa_df=daa_results_fil_df,
+                    title_dict=title_dict,
+                    output_file=plot_file_path,
+                    asv=False,  # Set asv to False for pathway level analysis
+                )
 
-        print(f"Finished all analyses for location: {location}")
+            print(f"Finished all analyses for location: {location}")
 
-    print("Finished all locations analyses.")
+        #################
+        # Network analysis
+        #################
 
-    ##################
-    # Network analysis
-    ##################
+    #     ranks = ["species", "genus", "family", "order", "class", "phylum"]
 
-    # ranks = ["species", "genus", "family", "order", "class", "phylum"]
+    #     for rank in ranks:
+    #         # Define output file path for taxa tables
+    #         taxa_tables_file = os.path.join(
+    #             wor_dir, "tables", "taxa_tables", f"{rank}_table.csv"
+    #         )
 
-    # for rank in ranks:
-    #     # Define output file path for taxa tables
-    #     taxa_tables_file = os.path.join(
-    #         wor_dir, "tables", "taxa_tables", f"{rank}_table.csv"
-    #     )
+    #         # Create taxa tables
+    #         taxa_table_df = create_taxa_tables(
+    #             asv_table_df,
+    #             taxonomy_df,
+    #             rank=rank,
+    #             output_file=taxa_tables_file,
+    #         )
 
-    #     # Create taxa tables
-    #     taxa_table_df = create_taxa_tables(
-    #         asv_table_df,
-    #         taxonomy_df,
-    #         rank=rank,
-    #         output_file=taxa_tables_file,
-    #     )
+    #         # subset taxa table for the current location
+    #         taxa_table_df = taxa_table_df[location_df.index]
 
-    #     # Define title dictionary for co-occurrence analysis
-    #     title_dict = {
-    #         "primary_variable": "Diagnosis",
-    #         "location": str(location),  # Convert to string here
-    #         "rank": rank,
-    #     }
+    #         # Define title dictionary for co-occurrence analysis
+    #         title_dict = {
+    #             "primary_variable": "Diagnosis",
+    #             "location": str(location),  # Convert to string here
+    #             "rank": rank,
+    #         }
 
-    #     # Define output directory for co-occurrence analysis
-    #     output_dir = os.path.join(
-    #         wor_dir,
-    #         "co_occurrence_analysis",
-    #         f"{rank}_level",
-    #         str(location),  # Convert to string here too
-    #     )
+    #         # Define output directory for co-occurrence analysis
+    #         output_dir = os.path.join(
+    #             wor_dir,
+    #             "co_occurrence_analysis",
+    #             f"{rank}_level",
+    #             str(location),  # Convert to string here too
+    #         )
 
-    #     print("Performing co-occurrence analysis for rank:", rank)
+    #         print("Performing co-occurrence analysis for rank:", rank)
 
-    #     perform_co_occurrence_network(
-    #         taxa_table_df=taxa_table_df,
-    #         title_dict=title_dict,
-    #         output_dir=output_dir,
-    # )
+    #         perform_co_occurrence_network(
+    #             taxa_table_df=taxa_table_df,
+    #             title_dict=title_dict,
+    #             output_dir=output_dir,
+    #         )
 
-    # print(f"Finished processing location: {location}")
+    # print("Finished all locations analyses.")
+
+    print(f"Finished processing location: {location}")
 
     # End of location loop
+
+    # Figures
+
+    # Figure 1
+    # supp_fig_1_script_file = os.path.join(wor_dir, "src/R/supplemental_figure_1.R")
 
     # Copy the results to Dropbox
     copy_to_dropbox(
@@ -2279,32 +2386,6 @@ def main():
         destination="onedrive:/sharing/oesphlora/bioinformatics",
         exclude_dirs=["data", "fastq_files"],
     )
-
-    # # Run LINDA analysis
-    # daa_results_taxa_df, daa_results_taxa_fil_df = linda_daa(
-    #     asv_table_dep_fil_df,
-    #     merged_df,
-    #     primary_variable="Diagnosis",
-    #     taxonomy_table=filtered_taxonomy_df,
-    # )
-
-    # # Define directory for DAA results
-    # daa_dir = os.path.join(directory, "tables", "daa_results")
-    # # Create the directory if it doesn't exist
-    # os.makedirs(daa_dir, exist_ok=True)
-
-    # # Define path to save the full results
-    # full_results_file = os.path.join(daa_dir, "full_results.csv")
-
-    # # Save the full results
-    # daa_results_taxa_df.to_csv(full_results_file, index=False)
-    # print(f"Full results saved to: {full_results_file}")
-
-    # # Define path to save the filtered results
-    # filtered_results_file = os.path.join(daa_dir, "filtered_results.csv")
-    # # Save the filtered results
-    # daa_results_taxa_fil_df.to_csv(filtered_results_file, index=False)
-    # print(f"Full results saved to: {full_results_file}")
 
 
 if __name__ == "__main__":

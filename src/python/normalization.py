@@ -101,3 +101,34 @@ def presence_absence_transform(
     pa_data = pa_data.loc[pa_data.sum(axis=1) > 0]
 
     return pa_data
+
+
+def total_sum_scaling(
+    counts: pd.DataFrame, qiime_orientation: bool = False
+) -> pd.DataFrame:
+    """
+    Total Sum Scaling (TSS) normalization for microbiome count data.
+
+    Scales each sample's counts by the total sum of counts in that sample,
+    converting counts to relative abundances. Automatically removes samples
+    with all-zero counts.
+
+    Args:
+        counts (pd.DataFrame): Count table with non-negative values.
+        qiime_orientation (bool): If True, transpose input from QIIME2 format
+            (features × samples) to standard format (samples × features). Default False.    
+    Returns:
+        pd.DataFrame: TSS-normalized data with all-zero samples removed.
+            Always returns in samples × features orientation.
+    """
+    if qiime_orientation:
+        counts = counts.T
+
+    # Calculate total sum per sample
+    sample_sums = counts.sum(axis=1)
+
+    # Avoid division by zero by removing all-zero samples
+    nonzero_samples = sample_sums > 0
+    tss_data = counts.loc[nonzero_samples].div(sample_sums[nonzero_samples], axis=0)
+
+    return tss_data

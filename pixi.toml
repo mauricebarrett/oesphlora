@@ -17,6 +17,8 @@ analysis= ["analysis"]
 CARGO_HOME = "$PIXI_PROJECT_ROOT/.cargo"
 PATH = "$CARGO_HOME/bin:$PATH"
 PKG_CONFIG_PATH = "$PIXI_ENV_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+# Set R_HOME for rpy2
+R_HOME = "$CONDA_PREFIX/lib/R"
 
 
 [tasks.install-fqkit]

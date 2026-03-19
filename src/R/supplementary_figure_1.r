@@ -8,7 +8,7 @@ suppressPackageStartupMessages(library(ggthemes))
 
 # Load the data
 # Load the data
-genus_table <- as.matrix(read.csv("/home/maurice/projects/phd/oesphlora/tables/taxa_tables/genus_table.csv", check.names = FALSE, row.names = 1))
+genus_table <- as.matrix(read.csv("/home/mossy/projects/phd/oesphlora/tables/taxa_tables/genus_table.csv", check.names = FALSE, row.names = 1))
 
 # convert to percentage
 genus_table_mod <- genus_table[rowSums(genus_table) != 0, ]
@@ -37,14 +37,14 @@ genus_table_long <- melt(genus_table_filter , id.vars = "genus", variable.name =
 colnames(genus_table_long) <- c("genus", "sample_id", "count")
 
 # Load metadata
-metadata <- read.csv("/home/maurice/projects/phd/oesphlora/metadata/merged_data.csv")
+metadata <- read.csv("/home/mossy/projects/phd/oesphlora/metadata/merged_data.csv")
 
 # Merge the data
 merged_data <- merge(genus_table_long, metadata, by = "sample_id")
 
-# Aggregate the data by sample_location and genus by finding the mean of the count column
+# Aggregate across samples within biopsy location and Diagnosis
 merged_data_aggregated <- merged_data %>%
-  group_by(sample_location, genus) %>%
+  group_by(sample_location, Diagnosis, genus) %>%
   summarise(count = mean(count), .groups = "drop")
 
 
@@ -53,6 +53,10 @@ merged_data_aggregated$sample_location <- factor(merged_data_aggregated$sample_l
 
 merged_data_aggregated$sample_location <- gsub("_", " ", merged_data_aggregated$sample_location)
 merged_data_aggregated$sample_location <- gsub("biopsy", "Biopsy", merged_data_aggregated$sample_location)
+merged_data_aggregated$Diagnosis <- as.factor(merged_data_aggregated$Diagnosis)
+
+# Order facets by Diagnosis
+merged_data_aggregated$Diagnosis <- factor(merged_data_aggregated$Diagnosis, levels = c("Healthy", "GORD", "BO", "Dysplasia", "OAC", "Metastatic"))
 
 # Reorder variable (asv) column based on value (Abundance in percentage)
 merged_data_aggregated$genus <- reorder(merged_data_aggregated$genus, merged_data_aggregated$count)
@@ -60,12 +64,15 @@ merged_data_aggregated$genus <- reorder(merged_data_aggregated$genus, merged_dat
 # Plot genus level data
 taxa_bar_plot <- ggplot(data = merged_data_aggregated, aes(x = sample_location, y = count, fill = genus)) +
             geom_bar(stat = "identity", position = "stack", lwd = 0) +
+            facet_wrap(~ Diagnosis) +
             scale_y_continuous(breaks = seq(0, 100, 10), expand = expansion(mult = c(0, 0))) +
             scale_fill_manual(values = tableau_color_pal(palette = "Tableau 20", direction = -1)(20)) +
             labs(title = NULL,
                  x = "", y = "Relative abundance (%)") +
             guides(fill = guide_legend(title = "Genus", reverse = FALSE)) +
             theme(panel.background = element_rect(fill = 'white'),
+                  strip.background = element_blank(),
+                  strip.text = element_text(face = "bold", size = 12, color = "black"),
                   plot.title = element_text(size = 12, hjust = 0.5, face = "bold"),
                   plot.subtitle = element_text(face = "bold", size = 12, hjust = 0.5, family = "Helvetica"),
                   axis.line.y = element_line(linetype = 1, linewidth = 0.5, colour = 'black'),
@@ -83,7 +90,7 @@ print(taxa_bar_plot)
 
 
 #define output directory
-output_dir <- "/home/maurice/projects/phd/oesphlora/figures/supplementary_figures"
+output_dir <- "/home/mossy/projects/phd/oesphlora/figures/supplementary_figures"
 
 #create output directory if it doesn't exist
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)

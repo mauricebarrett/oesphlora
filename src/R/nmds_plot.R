@@ -31,10 +31,10 @@ plot_title_stats <- paste0(
 
 # Add row names as a column manually for both data frames
 nmds_coordinates_df$SampleID <- rownames(nmds_coordinates_df)
-metadata$SampleID <- rownames(metadata)
+metadata_df$SampleID <- rownames(metadata_df)
 
 # Perform the join based on 'SampleID'
-nmds_data <- merge(nmds_coordinates_df, metadata, by = "SampleID")
+nmds_data <- merge(nmds_coordinates_df, metadata_df, by = "SampleID")
 
 
 

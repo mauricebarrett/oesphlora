@@ -426,6 +426,7 @@ def main():
 
     asv_table_dep_fil_df = depth_filtering(asv_table_df, depth_threshold=2000)
 
+
     # Define path to save the ASV table in BIOM format
     asv_table_biom = os.path.join(asv_table_dir, "asv_table.biom")
 
@@ -445,6 +446,27 @@ def main():
 
     # Subset asv_table_dep_fil_df to only include samples in merged_df
     asv_table_dep_fil_df = asv_table_dep_fil_df[merged_df.index]
+
+
+    # Calculate read depth for each sample (sum all ASVs per sample)
+    sample_depths = asv_table_dep_fil_df.sum(axis=0)
+
+    # Calculate statistics
+    depth_stats = {
+        'mean': sample_depths.mean(),
+        'median': sample_depths.median(),
+        'min': sample_depths.min(),
+        'max': sample_depths.max(),
+        'std': sample_depths.std(),  # bonus: standard deviation
+    }
+
+    # Print the statistics
+    print(f"Read Depth Statistics:")
+    print(f"  Mean:   {depth_stats['mean']:.2f}")
+    print(f"  Median: {depth_stats['median']:.2f}")
+    print(f"  Min:    {depth_stats['min']:.0f}")
+    print(f"  Max:    {depth_stats['max']:.0f}")
+    print(f"  Std:    {depth_stats['std']:.2f}")
 
     ##########################################################
     # Generate demographic characteristics table
@@ -915,7 +937,7 @@ def main():
                 f"Jaccard NMDS plot already exists at {nmds_plot_file_path}. Skipping Jaccard analysis for {diagnosis}."
             )
         else:
-            print(f"Calculating Jaccard distances foqr {diagnosis}...")
+            print(f"Calculating Jaccard distances for {diagnosis}...")
             # Path to Jaccard distance matrix comparing locations per diagnosis
             jaccard_distance_matrix_file = os.path.join(
                 jaccard_dir,
@@ -937,6 +959,7 @@ def main():
                     jaccard_dir,
                     f"jaccard_pairwise_comparisons_between_locations_{diagnosis}.csv",
                 ),
+                all=True,
             )
 
             # Perform permanova  with vegan on the Jaccard distance matrix
@@ -944,6 +967,18 @@ def main():
                 metadata=diagnosis_df,
                 distance_df=jaccard_df,
                 primary_variable="sample_location",
+                strata="True",
+            )
+
+            # Save PERMANOVA results for summary tables and downstream figures
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in permanova_results_dict.items()]
+            ).to_csv(
+                os.path.join(
+                    jaccard_dir,
+                    f"jaccard_permanova_results_{diagnosis}.csv",
+                ),
+                index=False,
             )
 
             # Perform NMDS on the Jaccard distance matrix
@@ -1004,6 +1039,22 @@ def main():
                 metadata=diagnosis_df,
                 distance_df=bray_curtis_df,
                 primary_variable="sample_location",
+                strata="True",
+            )
+
+            # Save the PERMANOVA results so they can be reused in summary figures
+            results_df = pd.DataFrame(
+                [
+                    {"metric": metric, "value": value}
+                    for metric, value in results_dict.items()
+                ]
+            )
+            results_df.to_csv(
+                os.path.join(
+                    bray_curtis_location_dir,
+                    f"bray_curtis_permanova_results_{diagnosis}.csv",
+                ),
+                index=False,
             )
 
             # Perform pairwise comparisons with vegan on the Bray-Curtis distance matrix
@@ -1015,11 +1066,21 @@ def main():
                     bray_curtis_location_dir,
                     f"bray_curtis_pairwise_comparisons_comparing_locations_{diagnosis}.csv",
                 ),
+                all=True,
             )
 
             # Perform NMDS on the Bray-Curtis distance matrix
             coordinates_df, normalized_stress = perform_nmds(
                 distance_matrix=bray_curtis_dm
+            )
+
+            # Save the NMDS coordinates so they can be reused in Figure 5
+            coordinates_df.to_csv(
+                os.path.join(
+                    bray_curtis_location_dir,
+                    f"bray_curtis_nmds_coordinates_{diagnosis}.csv",
+                ),
+                index=True,
             )
 
             # Define a title dictionary for the NMDS plot
@@ -1078,6 +1139,7 @@ def main():
                     rpca_location_dir,
                     f"rpca_pairwise_comparisons_between_locations_{diagnosis}.csv",
                 ),
+                all=True,
             )
 
             # Perform permanova  with vegan on the RPCA distance matrix
@@ -1085,6 +1147,18 @@ def main():
                 metadata=diagnosis_df,
                 distance_df=robust_aitchison_distance_df,
                 primary_variable="sample_location",
+                strata="True",
+            )
+
+            # Save PERMANOVA results for summary tables and downstream figures
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in permanova_results.items()]
+            ).to_csv(
+                os.path.join(
+                    rpca_location_dir,
+                    f"rpca_permanova_results_{diagnosis}.csv",
+                ),
+                index=False,
             )
 
             # Create dict for title and primary variable
@@ -1156,6 +1230,7 @@ def main():
                     phylo_rpca_location_dir,
                     f"phylo_rpca_pairwise_comparisons_between_locations_{diagnosis}.csv",
                 ),
+                all=True,
             )
 
             # Perform permanova  with vegan on the Phylogenetic RPCA distance matrix
@@ -1163,6 +1238,18 @@ def main():
                 metadata=diagnosis_df,
                 distance_df=phylo_rpca_distance_df,
                 primary_variable="sample_location",
+                strata="True",
+            )
+
+            # Save PERMANOVA results for summary tables and downstream figures
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in permanova_results.items()]
+            ).to_csv(
+                os.path.join(
+                    phylo_rpca_location_dir,
+                    f"phylo_rpca_permanova_results_{diagnosis}.csv",
+                ),
+                index=False,
             )
 
             # Create dict for title and primary variable
@@ -1195,18 +1282,17 @@ def main():
             beta_fig_location_dir, "unweighted_unifrac"
         )
 
+        nmds_plot_file_path = os.path.join(
+            unweighted_unifrac_fig_location_dir,
+            f"unweighted_unifrac_nmds_plot_comparing_locations_{diagnosis}.pdf",
+        )
+
         if os.path.exists(nmds_plot_file_path):
             print(
                 f"Unweighted UniFrac NMDS plot already exists at {nmds_plot_file_path}. Skipping Unweighted UniFrac analysis for {diagnosis}."
             )
         else:
             print(f"Calculating Unweighted UniFrac distances for {diagnosis}...")
-
-            # Path to NMDS plot file comparing locations per diagnosis
-            nmds_plot_file_path = os.path.join(
-                unweighted_unifrac_fig_location_dir,
-                f"unweighted_unifrac_nmds_plot_comparing_locations_{diagnosis}.pdf",
-            )
 
             # Path to Unweighted UniFrac distance matrix comparing locations per diagnosis
             unweighted_unifrac_distance_matrix_file = os.path.join(
@@ -1237,6 +1323,7 @@ def main():
                     unweighted_unifrac_location_dir,
                     f"unweighted_unifrac_pairwise_comparisons_between_locations_{diagnosis}.csv",
                 ),
+                all=True,
             )
 
             # Perform permanova  with vegan on the Unweighted UniFrac distance matrix
@@ -1244,6 +1331,18 @@ def main():
                 metadata=diagnosis_df,
                 distance_df=unweighted_unifrac_df,
                 primary_variable="sample_location",
+                strata="True",
+            )
+
+            # Save PERMANOVA results for summary tables and downstream figures
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in results_dict.items()]
+            ).to_csv(
+                os.path.join(
+                    unweighted_unifrac_location_dir,
+                    f"unweighted_unifrac_permanova_results_{diagnosis}.csv",
+                ),
+                index=False,
             )
 
             # Create NMDS plot
@@ -1318,6 +1417,7 @@ def main():
                     generalized_unifrac_location_dir,
                     f"generalized_unifrac_pairwise_comparisons_between_locations_{diagnosis}.csv",
                 ),
+                all=True,
             )
 
             # Perform permanova  with vegan on the Generalized UniFrac distance matrix
@@ -1325,6 +1425,18 @@ def main():
                 metadata=diagnosis_df,
                 distance_df=generalized_unifrac_df,
                 primary_variable="sample_location",
+                strata="True",
+            )
+
+            # Save PERMANOVA results for summary tables and downstream figures
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in results_dict.items()]
+            ).to_csv(
+                os.path.join(
+                    generalized_unifrac_location_dir,
+                    f"generalized_unifrac_permanova_results_{diagnosis}.csv",
+                ),
+                index=False,
             )
 
             # Create NMDS plot
@@ -1479,6 +1591,85 @@ def main():
                     asv=False,  # Set asv to False for taxonomic level analysis
                 )
 
+        ##########################################################################
+        # 3.2.5 PICRUSt2 functional DAA between locations per diagnosis
+        ##########################################################################
+
+        picrust2_dir = os.path.join(wor_dir, "picrust2_differential_abundance_analysis")
+        picrust2_location_dir = os.path.join(picrust2_dir, "location")
+
+        picrust2_fig_dir = os.path.join(
+            fig_dir, "picrust2_differential_abundance_analysis"
+        )
+        picrust2_location_fig_dir = os.path.join(picrust2_fig_dir, "location")
+
+        print("Performing PICRUSt2 DAA between locations for this diagnosis...")
+
+        pathway_info = [
+            {
+                "name": "KEGG",
+                "table_df": kegg_pathways_df,
+                "subfolder": "kegg_level",
+                "file_prefix": "kegg",
+            },
+            {
+                "name": "EC",
+                "table_df": enzyme_commission_df,
+                "subfolder": "ec_level",
+                "file_prefix": "ec",
+            },
+            {
+                "name": "MetaCyc",
+                "table_df": metabolic_pathways_df,
+                "subfolder": "metacyc_level",
+                "file_prefix": "metacyc",
+            },
+        ]
+
+        for info in pathway_info:
+            print(f"Performing DAA on {info['name']} pathways for {diagnosis}...")
+
+            table_diagnosis = info["table_df"][diagnosis_df.index]
+
+            daa_file = os.path.join(
+                picrust2_location_dir,
+                info["subfolder"],
+                f"daa_{info['file_prefix']}_results_comparing_locations_{diagnosis}.csv",
+            )
+
+            if os.path.exists(daa_file):
+                print(
+                    f"DAA results already exist for {info['name']} pathways for {diagnosis}. Skipping."
+                )
+            else:
+                daa_results_fil_df = linda_daa_picrust2(
+                    function_table_df=table_diagnosis,
+                    metadata_df=diagnosis_df,
+                    primary_variable="sample_location",
+                    threshold=20,
+                    pairwise=True,
+                    output_file=daa_file,
+                )
+
+                print(f"Plotting DAA results for {info['name']} pathways...")
+                plot_file_path = os.path.join(
+                    picrust2_location_fig_dir,
+                    info["subfolder"],
+                    f"daa_{info['file_prefix']}_heatmap_comparing_locations_{diagnosis}.pdf",
+                )
+
+                title_dict = {
+                    "primary_variable": "sample_location",
+                    "title": f"DAA Results for {info['name']} functions comparing Locations for {diagnosis} Patients",
+                }
+
+                plot_heatmap_of_daa(
+                    daa_df=daa_results_fil_df,
+                    title_dict=title_dict,
+                    output_file=plot_file_path,
+                    asv=False,
+                )
+
         print(f"Finished all analyses for diagnosis: {diagnosis}")
 
     print("Finished all diagnoses analyses.")
@@ -1508,7 +1699,7 @@ def main():
 
         # Convert to BIOM format
         convert_to_biom_format(
-            asv_table_df=asv_table_location,
+            asv_table_df=rarefied_df,
             output_file=biom_file_path,
         )
         print(f"BIOM file saved to {biom_file_path}")
@@ -1632,6 +1823,17 @@ def main():
                 primary_variable="Diagnosis",
             )
 
+            # Save PERMANOVA results for summary table
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in permanova_results_dict.items()]
+            ).to_csv(
+                os.path.join(
+                    jaccard_diagnosis_dir,
+                    f"jaccard_permanova_results_{location}.csv",
+                ),
+                index=False,
+            )
+
             # Perform NMDS on the Jaccard distance matrix
             coordinates_df, normalized_stress = perform_nmds(distance_matrix=jaccard_dm)
 
@@ -1644,7 +1846,7 @@ def main():
 
             plot_nmds_with_ggplot2(
                 nmds_coordinates=coordinates_df,
-                metadata=diagnosis_df,
+                metadata=location_df,
                 permanova_results=permanova_results_dict,
                 title_dict=title_dict,
                 output_file=nmds_plot_file_path,
@@ -1784,6 +1986,14 @@ def main():
                 primary_variable="Diagnosis",
             )
 
+            # Save PERMANOVA results for summary table
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in rpca_results_dict.items()]
+            ).to_csv(
+                os.path.join(rpca_dir, f"rpca_permanova_results_{location}.csv"),
+                index=False,
+            )
+
             # Perform pairwise comparisons with vegan on the RPCA distance matrix
             perform_pairwise_comparisons_permanova(
                 metadata=location_df,
@@ -1833,7 +2043,7 @@ def main():
 
             # Path to directory to results of Phylogenetic Robust Aitchison PCA comparing diagnoses per location
             phylo_rpca_dir = os.path.join(
-                beta_fig_diagnosis_dir, "phylogenetic_robust_aitchison_pca"
+                beta_div_diagnosis_dir, "phylo_rpca"
             )
 
             # Perform Phylogenetic RPCA
@@ -1858,6 +2068,21 @@ def main():
                 metadata=location_df,
                 distance_df=phylo_rpca_distance_df,
                 primary_variable="Diagnosis",
+            )
+
+            # Save PERMANOVA results for summary table
+            results_df = pd.DataFrame(
+                [
+                    {"metric": metric, "value": value}
+                    for metric, value in phylo_rpca_results_dict.items()
+                ]
+            )
+            results_df.to_csv(
+                os.path.join(
+                    phylo_rpca_dir,
+                    f"phylo_rpca_permanova_results_{location}.csv",
+                ),
+                index=False,
             )
 
             # Perform pairwise comparisons with vegan on the phylo RPCA distance matrix
@@ -1916,7 +2141,7 @@ def main():
             # Path to Unweighted UniFrac distance matrix comparing locations per diagnosis
             unweighted_unifrac_distance_matrix_file = os.path.join(
                 unweighted_unifrac_diagnosis_dir,
-                f"unweighted_unifrac_distance_matrix_comparing_locations_{diagnosis}.csv",
+                f"unweighted_unifrac_distance_matrix_comparing_diagnoses_{location}.csv",
             )
 
             # Calculate Unweighted UniFrac distance
@@ -1949,6 +2174,17 @@ def main():
                 metadata=location_df,
                 distance_df=unweighted_unifrac_df,
                 primary_variable="Diagnosis",
+            )
+
+            # Save PERMANOVA results for summary table
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in results_dict.items()]
+            ).to_csv(
+                os.path.join(
+                    unweighted_unifrac_diagnosis_dir,
+                    f"unweighted_unifrac_permanova_results_{location}.csv",
+                ),
+                index=False,
             )
 
             # Create NMDS plot
@@ -2034,17 +2270,28 @@ def main():
                 primary_variable="Diagnosis",
             )
 
+            # Save PERMANOVA results for summary table
+            pd.DataFrame(
+                [{"metric": k, "value": v} for k, v in results_dict.items()]
+            ).to_csv(
+                os.path.join(
+                    generalized_unifrac_diagnosis_dir,
+                    f"generalized_unifrac_permanova_results_{location}.csv",
+                ),
+                index=False,
+            )
+
             # Create NMDS plot
             title_dict = {
                 "primary_variable": "Diagnosis",
-                "title": f"NMDS Plot of Generalized UniFrac distances comparing locations in {diagnosis} Patients",
+                "title": f"NMDS Plot of Generalized UniFrac distances comparing diagnoses for {location}",
                 "stress": normalized_stress,
             }
 
             # Plot NMDS
             plot_nmds_with_ggplot2(
                 nmds_coordinates=coordinates_df,
-                metadata=diagnosis_df,
+                metadata=location_df,
                 permanova_results=results_dict,
                 title_dict=title_dict,
                 output_file=nmds_plot_file_path,

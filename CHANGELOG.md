@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/mauricebarrett/oesphlora/compare/v1.8.0...v1.9.0) (2026-03-19)
+
+
+### Features
+
+* enhance analysis scripts and add summary tables ([c685954](https://github.com/mauricebarrett/oesphlora/commit/c6859542248f56f7d85eebb565d4798f911da380))
+
 # [1.8.0](https://github.com/mauricebarrett/oesphlora/compare/v1.7.4...v1.8.0) (2026-01-19)
 
 

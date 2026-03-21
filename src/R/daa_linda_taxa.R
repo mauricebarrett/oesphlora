@@ -10,7 +10,9 @@ linda_output <- MicrobiomeStat::linda(
   mean.abund.filter = 0,
   max.abund.filter = 0,
   is.winsor = TRUE,
-  adaptive = TRUE,
+  # Pin the zero-handling strategy for reproducible pairwise comparisons.
+  adaptive = FALSE,
+  zero.handling = "pseudo-count",
   pseudo.cnt = 0.5,
   corr.cut = 0.1,
   n.cores = 1,

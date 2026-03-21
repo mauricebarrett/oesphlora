@@ -6,7 +6,6 @@ Generates summary tables of patient demographics by diagnosis group.
 import pandas as pd
 import numpy as np
 from scipy import stats
-from typing import Dict, Tuple
 
 
 def generate_demographic_table(

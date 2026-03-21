@@ -461,7 +461,7 @@ def main():
     }
 
     # Print the statistics
-    print(f"Read Depth Statistics:")
+    print("Read Depth Statistics:")
     print(f"  Mean:   {depth_stats['mean']:.2f}")
     print(f"  Median: {depth_stats['median']:.2f}")
     print(f"  Min:    {depth_stats['min']:.0f}")
@@ -1646,7 +1646,7 @@ def main():
                     function_table_df=table_diagnosis,
                     metadata_df=diagnosis_df,
                     primary_variable="sample_location",
-                    threshold=20,
+                    threshold=10,
                     pairwise=True,
                     output_file=daa_file,
                 )
@@ -2541,7 +2541,7 @@ def main():
                     function_table_df=table_location,
                     metadata_df=location_df,
                     primary_variable="Diagnosis",
-                    threshold=20,
+                    threshold=10,
                     pairwise=False,
                     output_file=daa_file,
                 )

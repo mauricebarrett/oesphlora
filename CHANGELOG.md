@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/mauricebarrett/oesphlora/compare/v1.9.0...v1.9.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* update print statements and adjust thresholds in analysis scripts ([a3d2d20](https://github.com/mauricebarrett/oesphlora/commit/a3d2d20ec263fc4725d99baa0713251f653d9e90))
+
 # [1.9.0](https://github.com/mauricebarrett/oesphlora/compare/v1.8.0...v1.9.0) (2026-03-19)
 
 
